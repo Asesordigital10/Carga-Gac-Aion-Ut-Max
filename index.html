@@ -10,8 +10,9 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // CONFIGURACIÓN DE JUAN CARLOS
         const firebaseConfig = {
             apiKey: "AIzaSyBlrsjN8s3iN0NRiuemEowIIwVqtkkWlOo",
             authDomain: "control-carga-aion-ut.firebaseapp.com",
@@ -30,64 +31,76 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const appId = "control-carga-aion-ut";
 
         let user = null;
         let historialCargas = [];
-        let estadoAuto = { ultimoLavado: Date.now(), por: "Nadie" };
+        let estadoAuto = { ultimoLavado: Date.now(), por: "Juan" };
         let conductorSeleccionado = "Juan";
 
-        const selectorConductores = document.querySelectorAll('.driver-chip');
-        selectorConductores.forEach(chip => {
-            chip.addEventListener('click', () => {
-                selectorConductores.forEach(c => {
-                    c.classList.remove('bg-blue-600', 'text-white');
-                    c.classList.add('bg-zinc-800', 'text-zinc-400');
+        // SELECTOR DE CONDUCTOR
+        const setupDriverSelector = () => {
+            const chips = document.querySelectorAll('.driver-chip');
+            chips.forEach(chip => {
+                chip.addEventListener('click', () => {
+                    chips.forEach(c => c.classList.remove('bg-blue-600', 'text-white', 'border-blue-500'));
+                    chips.forEach(c => c.classList.add('bg-zinc-800', 'text-zinc-400', 'border-zinc-700'));
+                    chip.classList.remove('bg-zinc-800', 'text-zinc-400', 'border-zinc-700');
+                    chip.classList.add('bg-blue-600', 'text-white', 'border-blue-500');
+                    conductorSeleccionado = chip.dataset.name;
                 });
-                chip.classList.remove('bg-zinc-800', 'text-zinc-400');
-                chip.classList.add('bg-blue-600', 'text-white');
-                conductorSeleccionado = chip.dataset.name;
             });
-        });
-
-        signInAnonymously(auth).catch(e => console.error("Error Auth:", e));
-
-        onAuthStateChanged(auth, (u) => {
-            if (u) {
-                user = u;
-                // Escuchar Cargas
-                const qCargas = query(collection(db, 'cargas'), orderBy('fecha', 'desc'));
-                onSnapshot(qCargas, (snap) => {
-                    historialCargas = snap.docs.map(d => d.data());
-                    renderizarApp();
-                }, (err) => console.error("Error Cargas:", err));
-
-                // Escuchar Estado Lavado
-                onSnapshot(doc(db, 'estado', 'general'), (snap) => {
-                    if (snap.exists()) {
-                        estadoAuto = snap.data();
-                    }
-                    renderizarApp();
-                }, (err) => console.error("Error Estado:", err));
-            }
-        });
-
-        window.registrarLavado = async () => {
-            if(!user) return;
-            try {
-                await setDoc(doc(db, 'estado', 'general'), { 
-                    ultimoLavado: Date.now(), 
-                    por: conductorSeleccionado 
-                });
-                alert("¡Lavado registrado por " + conductorSeleccionado + "!");
-            } catch (e) { alert("Error al registrar lavado"); }
         };
 
+        // FIREBASE SYNC
+        const initApp = async () => {
+            try {
+                await signInAnonymously(auth);
+            } catch (err) { console.error("Error Auth:", err); }
+
+            onAuthStateChanged(auth, (u) => {
+                if (u) {
+                    user = u;
+                    // Escuchar Cargas
+                    const cargasRef = collection(db, 'artifacts', appId, 'public', 'data', 'cargas');
+                    onSnapshot(cargasRef, (snap) => {
+                        historialCargas = snap.docs.map(d => d.data())
+                            .sort((a, b) => b.fecha - a.fecha);
+                        renderizarApp();
+                    });
+                    // Escuchar Lavado
+                    const estadoRef = doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general');
+                    onSnapshot(estadoRef, (snap) => {
+                        if (snap.exists()) {
+                            estadoAuto = snap.data();
+                            renderizarApp();
+                        }
+                    });
+                }
+            });
+        };
+
+        // REGISTRAR LAVADO (MANUAL CON CALENDARIO)
+        window.guardarLavadoManual = async () => {
+            const fechaInput = document.getElementById('fecha-lavado').value;
+            if (!fechaInput) return alert("Selecciona un día en el calendario");
+            
+            const [year, month, day] = fechaInput.split('-');
+            const timestamp = new Date(year, month - 1, day, 12, 0, 0).getTime();
+
+            try {
+                const estadoRef = doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general');
+                await setDoc(estadoRef, { 
+                    ultimoLavado: timestamp, 
+                    por: conductorSeleccionado 
+                });
+                alert("Lavado registrado con éxito");
+            } catch (e) { console.error(e); }
+        };
+
+        // GUARDAR CARGA
         document.getElementById('carga-form').onsubmit = async (e) => {
             e.preventDefault();
-            const btn = e.target.querySelector('button');
-            btn.disabled = true;
-            btn.innerText = "GUARDANDO...";
-
             const km = parseFloat(document.getElementById('km').value);
             const kwh = parseFloat(document.getElementById('kwh').value);
             const esCien = document.getElementById('es-cien').checked;
@@ -96,8 +109,7 @@
             let ahorro = 0;
 
             if (historialCargas.length > 0) {
-                const ultimoKm = historialCargas[0].km;
-                const dist = km - ultimoKm;
+                const dist = km - historialCargas[0].km;
                 if (dist > 0) {
                     const costoNaftaEquiv = (dist / RENDIMIENTO_VERSA_KML) * PRECIO_NAFTA_L;
                     ahorro = costoNaftaEquiv - costo;
@@ -105,159 +117,168 @@
             }
 
             try {
-                await addDoc(collection(db, 'cargas'), {
-                    fecha: Date.now(),
-                    km, kwh, conductor: conductorSeleccionado,
-                    esCien, costo, ahorro
+                const cargasRef = collection(db, 'artifacts', appId, 'public', 'data', 'cargas');
+                await addDoc(cargasRef, {
+                    fecha: Date.now(), km, kwh, conductor: conductorSeleccionado, esCien, costo, ahorro
                 });
                 e.target.reset();
-                alert("¡Carga guardada!");
-            } catch (err) {
-                alert("Error al guardar datos.");
-            } finally {
-                btn.disabled = false;
-                btn.innerText = "REGISTRAR CARGA";
-            }
+            } catch (e) { console.error(e); }
         };
 
         function renderizarApp() {
-            const kmActual = historialCargas.length > 0 ? historialCargas[0].km : 0;
+            const kmActual = historialCargas[0]?.km || 0;
             
-            // 1. Alerta Mantenimiento
-            const alertaService = document.getElementById('alerta-service');
-            if (kmActual > 0) {
-                const proximoService = Math.ceil((kmActual + 1) / 10000) * 10000;
-                const faltan = proximoService - kmActual;
-                if (faltan <= 200) {
-                    alertaService.classList.remove('hidden');
-                    alertaService.innerHTML = `
-                        <div class="bg-blue-600/20 border border-blue-500/50 p-4 rounded-2xl flex items-center gap-3 text-blue-400 mb-4">
-                            <i data-lucide="wrench" class="w-5 h-5"></i>
-                            <p class="text-sm font-bold tracking-tight">¡Service cerca! Faltan ${faltan} km para los ${proximoService.toLocaleString()} km.</p>
-                        </div>`;
-                } else { alertaService.classList.add('hidden'); }
-            }
-
-            // 2. Alerta Nivelación
-            const indexCien = historialCargas.findIndex(c => c.esCien);
-            const necesitaNivelar = (indexCien >= 5 || indexCien === -1) && historialCargas.length > 0;
-            document.getElementById('alerta-nivelacion').className = necesitaNivelar ? 'block mb-4' : 'hidden';
-
-            // 3. Stats Ahorro
-            const totalAhorro = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
-            document.getElementById('stats-ahorro').innerHTML = `
-                <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 shadow-xl">
-                    <p class="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Ahorro vs Versa</p>
-                    <p class="text-2xl font-black text-green-500">$ ${totalAhorro.toLocaleString('es-UY', {maximumFractionDigits:0})}</p>
-                </div>`;
-
-            // 4. Card Lavado
-            const diasLavado = Math.floor((Date.now() - (estadoAuto.ultimoLavado || Date.now())) / (1000*60*60*24));
-            document.getElementById('card-lavado').innerHTML = `
-                <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 shadow-xl flex justify-between items-center">
-                    <div>
-                        <p class="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Último Lavado</p>
-                        <p class="text-lg font-bold ${diasLavado > 7 ? 'text-orange-400' : 'text-zinc-200'}">
-                            ${diasLavado === 0 ? '¡Hoy!' : 'Hace ' + diasLavado + ' d'}
-                        </p>
-                    </div>
-                    <button onclick="registrarLavado()" class="bg-zinc-800 hover:bg-blue-600/20 p-3 rounded-xl transition-all border border-zinc-700">
-                        <i data-lucide="droplets" class="text-blue-400 w-5 h-5"></i>
-                    </button>
-                </div>`;
-
-            // 5. Historial
-            const listaCargas = document.getElementById('lista-cargas');
-            if (historialCargas.length === 0) {
-                listaCargas.innerHTML = '<p class="text-zinc-600 text-center py-6 text-sm">Esperando primer registro...</p>';
-            } else {
-                listaCargas.innerHTML = historialCargas.slice(0, 3).map(c => `
-                    <div class="bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/50 mb-2 flex justify-between items-center">
+            // --- LÓGICA DE MANTENIMIENTO ---
+            const proximoService = Math.ceil((kmActual + 1) / 10000) * 10000;
+            const faltan = proximoService - kmActual;
+            const alertaService = document.getElementById('alerta-mantenimiento');
+            
+            if (faltan <= 500 && kmActual > 0) {
+                alertaService.classList.remove('hidden');
+                alertaService.innerHTML = `
+                    <div class="bg-orange-600 text-white p-4 rounded-2xl flex items-center gap-4 mb-6 shadow-lg shadow-orange-900/40">
+                        <i data-lucide="wrench" class="w-8 h-8"></i>
                         <div>
-                            <span class="text-[10px] font-black text-blue-500 uppercase tracking-tighter">${c.conductor}</span>
-                            <p class="text-sm font-bold text-zinc-300">${c.km.toLocaleString()} km</p>
+                            <p class="font-black text-sm uppercase">¡Aviso de Mantenimiento!</p>
+                            <p class="text-xs opacity-90">Faltan ${faltan} km para los ${proximoService.toLocaleString()} km oficiales.</p>
                         </div>
-                        <div class="text-right">
-                            <p class="text-xs font-bold text-green-600">$${c.costo.toFixed(0)}</p>
-                            <p class="text-[9px] text-zinc-600 font-medium">${new Date(c.fecha).toLocaleDateString()}</p>
+                    </div>`;
+            } else { alertaService.classList.add('hidden'); }
+
+            // MONITOR DE KM
+            const progreso = ((10000 - (faltan > 10000 ? 10000 : faltan)) / 10000) * 100;
+            document.getElementById('monitor-km').innerHTML = `
+                <div class="flex justify-between items-end mb-2">
+                    <p class="text-[10px] text-zinc-500 uppercase font-bold tracking-widest font-mono">Service Progress</p>
+                    <p class="text-[10px] font-bold text-blue-500 font-mono">${kmActual.toLocaleString()} / ${proximoService.toLocaleString()} KM</p>
+                </div>
+                <div class="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
+                    <div class="h-full bg-blue-600 transition-all duration-1000" style="width: ${progreso}%"></div>
+                </div>`;
+
+            // CARD LAVADO (REDISEÑO SEGÚN PEDIDO)
+            const hoy = new Date().setHours(0,0,0,0);
+            const dLavado = new Date(estadoAuto.ultimoLavado).setHours(0,0,0,0);
+            const dias = Math.floor(Math.abs(hoy - dLavado) / (1000 * 60 * 60 * 24));
+
+            document.getElementById('card-lavado').innerHTML = `
+                <div class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800 shadow-xl mb-6">
+                    <div class="flex items-start gap-4 mb-5">
+                        <div class="bg-blue-500/10 p-3 rounded-2xl text-blue-500">
+                            <i data-lucide="droplets"></i>
                         </div>
-                    </div>`).join('');
+                        <div>
+                            <p class="text-sm font-bold text-zinc-100">
+                                El último lavado fue hace <span class="${dias > 7 ? 'text-orange-500' : 'text-blue-500'}">${dias} días</span>.
+                            </p>
+                            <p class="text-[9px] text-zinc-600 uppercase mt-1 font-mono">Por: ${estadoAuto.por}</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="date" id="fecha-lavado" class="flex-grow bg-black border border-zinc-800 text-zinc-400 p-3 rounded-xl text-sm outline-none focus:border-blue-500">
+                        <button onclick="guardarLavadoManual()" class="bg-blue-600 hover:bg-blue-500 text-white px-5 rounded-xl transition-all shadow-lg active:scale-95">
+                            <i data-lucide="calendar-plus"></i>
+                        </button>
+                    </div>
+                </div>`;
+
+            // AHORRO
+            const ahorroTotal = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
+            document.getElementById('stats-ahorro').innerHTML = `
+                <div class="bg-zinc-900 p-5 rounded-3xl border border-zinc-800 shadow-xl flex items-center justify-between mb-8">
+                    <div>
+                        <p class="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1 font-mono">Ahorro vs Versa</p>
+                        <p class="text-3xl font-black text-green-500">$ ${ahorroTotal.toLocaleString('es-UY', {maximumFractionDigits:0})}</p>
+                    </div>
+                    <div class="bg-green-500/10 p-3 rounded-2xl text-green-500">
+                        <i data-lucide="trending-up" class="w-8 h-8"></i>
+                    </div>
+                </div>`;
+
+            // HISTORIAL
+            const lista = document.getElementById('lista-cargas');
+            if (historialCargas.length === 0) {
+                lista.innerHTML = '<p class="text-center text-zinc-700 py-10 text-xs italic">Ingresá el kilometraje actual para activar.</p>';
+            } else {
+                lista.innerHTML = historialCargas.slice(0, 3).map(c => `
+                <div class="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/40 mb-3 flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-blue-500 border border-zinc-700">${c.conductor.charAt(0)}</div>
+                        <div><p class="text-sm font-bold text-zinc-200">${c.km.toLocaleString()} km</p><p class="text-[9px] text-zinc-600 font-mono">${new Date(c.fecha).toLocaleDateString()}</p></div>
+                    </div>
+                    <div class="text-right"><p class="text-xs font-bold text-green-600">$${c.costo.toFixed(0)}</p><p class="text-[9px] text-zinc-700 font-mono">${c.kwh} kWh</p></div>
+                </div>`).join('');
             }
-            
             lucide.createIcons();
         }
 
-        // Ejecutar render inicial
         window.onload = () => {
-            renderizarApp();
+            setupDriverSelector();
+            initApp();
             lucide.createIcons();
         };
     </script>
+    <style>
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+        body { background-color: #000; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    </style>
 </head>
-<body class="p-5 max-w-md mx-auto bg-black text-zinc-100 min-h-screen pb-10">
+<body class="p-5 max-w-md mx-auto min-h-screen pb-16">
     
-    <header class="mb-6 flex justify-between items-end">
+    <header class="mb-8 flex justify-between items-center">
         <div>
-            <h1 class="text-2xl font-black italic tracking-tighter">AION<span class="text-blue-500">MAX</span></h1>
-            <p class="text-[9px] text-zinc-600 uppercase font-bold tracking-[0.2em]">Bitácora de Gestión</p>
+            <h1 class="text-3xl font-black italic tracking-tighter uppercase leading-none text-white">AION<span class="text-blue-500 font-medium">MAX</span></h1>
+            <p class="text-[10px] text-zinc-600 uppercase font-bold tracking-[0.3em] mt-2 font-mono">Control de Gestión</p>
         </div>
-        <div class="text-[9px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full text-zinc-500 font-bold uppercase">Gasto Casa Pro v2</div>
+        <div class="bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800/50 text-blue-500 shadow-lg">
+            <i data-lucide="zap"></i>
+        </div>
     </header>
 
-    <div id="alerta-service" class="hidden"></div>
-    <div id="alerta-nivelacion" class="hidden">
-        <div class="bg-orange-500/10 border border-orange-500/50 p-4 rounded-2xl flex items-center gap-3 text-orange-500 mb-4">
-            <i data-lucide="battery-warning" class="w-6 h-6"></i>
-            <p class="text-sm font-bold">Nivelación recomendada (Carga al 100%).</p>
-        </div>
-    </div>
+    <div id="alerta-mantenimiento" class="hidden"></div>
+    <div id="monitor-km" class="mb-8 px-1"></div>
 
-    <div class="grid grid-cols-2 gap-3 mb-8">
-        <div id="stats-ahorro"></div>
-        <div id="card-lavado"></div>
-    </div>
+    <div id="card-lavado"></div>
+    <div id="stats-ahorro"></div>
 
-    <section class="bg-zinc-900/40 p-6 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl mb-10">
-        <h2 class="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-6 text-center">Registrar Nueva Carga</h2>
-        <form id="carga-form" class="space-y-6">
+    <section class="bg-zinc-900/40 p-8 rounded-[3rem] border border-zinc-800/40 shadow-2xl mb-12 relative overflow-hidden">
+        <div class="absolute -top-10 -right-10 w-32 h-32 bg-blue-600/5 blur-3xl"></div>
+        <h2 class="text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em] mb-8 text-center font-mono">Registrar Nueva Carga</h2>
+        <form id="carga-form" class="space-y-8">
             <div class="grid grid-cols-3 gap-2">
-                <div data-name="Juan" class="driver-chip p-3 rounded-2xl border border-zinc-800 text-center font-bold text-xs bg-blue-600 text-white cursor-pointer">Juan</div>
-                <div data-name="Tania" class="driver-chip p-3 rounded-2xl border border-zinc-800 text-center font-bold text-xs bg-zinc-800 text-zinc-400 cursor-pointer">Tania</div>
-                <div data-name="Mauri" class="driver-chip p-3 rounded-2xl border border-zinc-800 text-center font-bold text-xs bg-zinc-800 text-zinc-400 cursor-pointer">Mauri</div>
+                <div data-name="Juan" class="driver-chip p-3 rounded-2xl border border-blue-500 text-center font-bold text-xs bg-blue-600 text-white cursor-pointer shadow-lg shadow-blue-900/20 transition-all">Juan</div>
+                <div data-name="Tania" class="driver-chip p-3 rounded-2xl border border-zinc-700 text-center font-bold text-xs bg-zinc-800 text-zinc-400 cursor-pointer transition-all">Tania</div>
+                <div data-name="Mauri" class="driver-chip p-3 rounded-2xl border border-zinc-700 text-center font-bold text-xs bg-zinc-800 text-zinc-400 cursor-pointer transition-all">Mauri</div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div class="space-y-1">
-                    <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2">KM Actual</label>
-                    <input type="number" id="km" required class="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-center font-bold text-lg focus:border-blue-500 transition-all outline-none" placeholder="0">
+            <div class="grid grid-cols-2 gap-5">
+                <div class="space-y-2">
+                    <label class="text-[10px] text-zinc-600 font-bold uppercase ml-2 font-mono">Km Actual</label>
+                    <input type="number" id="km" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-2xl focus:border-blue-600 outline-none transition-all shadow-inner" placeholder="0">
                 </div>
-                <div class="space-y-1">
-                    <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2">kWh Cargados</label>
-                    <input type="number" step="0.1" id="kwh" required class="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-center font-bold text-lg focus:border-blue-500 transition-all outline-none" placeholder="0.0">
+                <div class="space-y-2">
+                    <label class="text-[10px] text-zinc-600 font-bold uppercase ml-2 font-mono">kWh Totales</label>
+                    <input type="number" step="0.1" id="kwh" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-2xl focus:border-blue-600 outline-none transition-all shadow-inner" placeholder="0.0">
                 </div>
             </div>
 
-            <label class="flex items-center justify-between p-4 bg-zinc-950/50 border border-zinc-800/50 rounded-2xl cursor-pointer active:bg-zinc-900 transition-colors">
-                <span class="text-xs font-bold text-zinc-400">¿Se cargó al 100%?</span>
+            <label class="flex items-center justify-between p-5 bg-black/50 border border-zinc-800/40 rounded-2xl cursor-pointer hover:bg-black transition-colors shadow-inner">
+                <span class="text-xs font-bold text-zinc-400">¿Carga completa (100%)?</span>
                 <input type="checkbox" id="es-cien" class="w-6 h-6 rounded-lg accent-blue-600">
             </label>
 
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-2xl font-black tracking-[0.1em] text-sm shadow-lg shadow-blue-900/20 transition-all active:scale-95 disabled:opacity-50">
-                REGISTRAR CARGA
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-[2.5rem] font-black tracking-[0.2em] text-sm shadow-xl shadow-blue-900/40 active:scale-95 transition-all">
+                GUARDAR REGISTRO
             </button>
         </form>
     </section>
 
     <div class="px-2">
-        <h3 class="text-[10px] font-black text-zinc-600 uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
-            <span class="w-8 h-[1px] bg-zinc-800"></span> Actividad Reciente
+        <h3 class="text-[10px] font-black text-zinc-700 uppercase mb-6 tracking-[0.3em] flex items-center gap-3">
+            <span class="w-8 h-[1px] bg-zinc-900"></span> Últimos Movimientos
         </h3>
         <div id="lista-cargas"></div>
     </div>
-
-    <footer class="mt-12 text-center opacity-20">
-        <p class="text-[8px] font-bold uppercase tracking-[0.3em]">Built for the Aion MAX Experience</p>
-    </footer>
 
     <script>lucide.createIcons();</script>
 </body>
