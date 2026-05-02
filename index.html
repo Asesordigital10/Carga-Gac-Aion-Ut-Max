@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASYS AUTO - Telemetría</title>
+    <title>ASYS AUTO</title>
     
     <!-- Configuración PWA -->
     <link rel="manifest" href="manifest.json">
@@ -22,7 +22,6 @@
         import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configuración Firebase Juan Carlos
         const firebaseConfig = {
             apiKey: "AIzaSyBlrsjN8s3iN0NRiuemEowIIwVqtkkWlOo",
             authDomain: "control-carga-aion-ut.firebaseapp.com",
@@ -32,7 +31,6 @@
             appId: "1:77118717320:web:93ee651259cc7866438e3d"
         };
 
-        // Precios actualizados al 1º de Mayo 2026
         const COMBUSTIBLES = {
             "Super 95": { precio: 88.03 },
             "Premium 97": { precio: 90.09 },
@@ -55,27 +53,25 @@
         let estadoAuto = { ultimoLavado: Date.now(), por: "Sistema", combustibleComparativo: "Super 95" };
         let conductorSeleccionado = "Juan";
 
-        // Registro seguro de Service Worker (Solo en HTTPS/HTTP)
-        if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) {
+        // Registro de Service Worker para PWA (solo en web real)
+        if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW registration skipped:', err));
+                navigator.serviceWorker.register('sw.js').catch(err => console.warn('PWA Mode Disabled in Preview'));
             });
         }
 
         const initAuth = async () => {
-            try { await signInAnonymously(auth); } catch (e) { console.error(e); }
+            try { await signInAnonymously(auth); } catch (e) { console.error("Auth Error", e); }
         };
         initAuth();
 
         onAuthStateChanged(auth, (u) => {
             if (u) {
                 user = u;
-                // Sincronización de Cargas
                 onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'cargas'), orderBy('fecha', 'desc')), (snap) => {
                     historialCargas = snap.docs.map(d => d.data());
                     renderizarApp();
                 });
-                // Sincronización de Estado (Lavado y Combustible)
                 onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general'), (snap) => {
                     if (snap.exists()) {
                         estadoAuto = { ...estadoAuto, ...snap.data() };
@@ -85,16 +81,21 @@
             }
         });
 
-        // Vista previa del costo en el formulario
+        // Función de telemetría: Calcula costo mientras escribes
         window.actualizarPreviewCosto = () => {
             const llegada = parseFloat(document.getElementById('kwh-llegada').value) || 0;
             const salida = parseFloat(document.getElementById('kwh-salida').value) || 0;
             const kwhCargados = Math.max(0, salida - llegada);
             const costo = (kwhCargados * PRECIO_KWH_BASE * IVA) + (PRECIO_CONEXION_BASE * IVA);
             
-            document.getElementById('preview-costo').innerText = kwhCargados > 0 
-                ? `Carga estimada: ${kwhCargados.toFixed(1)} kWh | Costo: $${costo.toFixed(0)}` 
-                : "Esperando telemetría de energía...";
+            const previewEl = document.getElementById('preview-costo');
+            if (kwhCargados > 0) {
+                previewEl.innerText = `Carga: ${kwhCargados.toFixed(1)} kWh | Costo: $${costo.toFixed(0)}`;
+                previewEl.classList.replace('text-zinc-500', 'text-blue-400');
+            } else {
+                previewEl.innerText = "Esperando datos de energía...";
+                previewEl.classList.replace('text-blue-400', 'text-zinc-500');
+            }
         };
 
         window.seleccionarCombustible = async (tipo) => {
@@ -114,14 +115,11 @@
             const docPdf = new jsPDF();
             const kmActual = historialCargas[0]?.km || 0;
             const ahorroTotal = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
-            
             docPdf.setFontSize(22);
             docPdf.text("ASYS AUTO - REPORTE DE GESTIÓN", 20, 20);
-            docPdf.setFontSize(10);
-            docPdf.text(`Vehículo: GAC Aion MAX | Reporte del: ${new Date().toLocaleDateString()}`, 20, 28);
-            docPdf.line(20, 32, 190, 32);
-            docPdf.text(`Kilometraje Actual: ${kmActual.toLocaleString()} km`, 20, 45);
-            docPdf.text(`Ahorro Acumulado vs ${estadoAuto.combustibleComparativo}: $ ${ahorroTotal.toLocaleString('es-UY')}`, 20, 52);
+            docPdf.setFontSize(12);
+            docPdf.text(`Vehículo: GAC Aion MAX | Kilometraje: ${kmActual} km`, 20, 35);
+            docPdf.text(`Ahorro vs ${estadoAuto.combustibleComparativo}: $ ${ahorroTotal.toLocaleString()}`, 20, 42);
             docPdf.save(`Reporte_AsysAuto_${new Date().toLocaleDateString()}.pdf`);
         };
 
@@ -159,7 +157,7 @@
             });
             
             e.target.reset();
-            document.getElementById('preview-costo').innerText = "Esperando telemetría de energía...";
+            document.getElementById('preview-costo').innerText = "Esperando datos de energía...";
         };
 
         function renderizarApp() {
@@ -168,37 +166,33 @@
             const faltan = proximoService - kmActual;
             const progreso = ((10000 - (faltan > 10000 ? 10000 : faltan)) / 10000) * 100;
 
-            // MONITOR SERVICE
             document.getElementById('card-mantenimiento').innerHTML = `
-                <div class="bg-zinc-900 border ${faltan < 500 ? 'border-orange-500 ring-2 ring-orange-500/20' : 'border-zinc-800'} p-5 rounded-3xl shadow-2xl transition-all duration-700">
-                    <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Mantenimiento Oficial</p>
+                <div class="bg-zinc-900 border ${faltan < 500 ? 'border-orange-500 ring-1 ring-orange-500/20' : 'border-zinc-800'} p-5 rounded-3xl shadow-xl">
+                    <p class="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Mantenimiento Oficial</p>
                     <p class="text-2xl font-black ${faltan < 500 ? 'text-orange-500' : 'text-zinc-100'}">Faltan ${faltan.toLocaleString()} km</p>
                     <div class="mt-4 w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
                         <div class="h-full bg-blue-600 transition-all duration-1000" style="width: ${progreso}%"></div>
                     </div>
-                    <p class="text-[9px] text-zinc-600 mt-2 text-right">Objetivo: ${proximoService.toLocaleString()} km</p>
                 </div>`;
 
-            // AHORRO & SELECTOR
             const ahorroTotal = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
             document.getElementById('card-ahorro').innerHTML = `
-                <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-2xl">
+                <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
                     <div class="flex justify-between items-center mb-6">
                         <div>
-                            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-1 tracking-widest">Ahorro Real vs Combustible</p>
+                            <p class="text-zinc-500 text-[10px] uppercase font-bold mb-1 tracking-widest">Ahorro Real Acumulado</p>
                             <p class="text-4xl font-black text-green-500 font-mono">$ ${ahorroTotal.toLocaleString('es-UY', {maximumFractionDigits:0})}</p>
                         </div>
                         <div class="p-3 bg-green-500/10 rounded-2xl text-green-500"><i data-lucide="trending-up"></i></div>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         ${Object.keys(COMBUSTIBLES).map(t => `
-                            <button onclick="seleccionarCombustible('${t}')" class="p-2 rounded-xl border text-[9px] font-bold transition-all ${estadoAuto.combustibleComparativo === t ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-500'}">
-                                ${t} ($${COMBUSTIBLES[t].precio})
+                            <button onclick="seleccionarCombustible('${t}')" class="p-2 rounded-xl border text-[9px] font-bold transition-all ${estadoAuto.combustibleComparativo === t ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-zinc-800 border-zinc-700 text-zinc-500'}">
+                                ${t}<br><span class="opacity-70">$${COMBUSTIBLES[t].precio}</span>
                             </button>`).join('')}
                     </div>
                 </div>`;
 
-            // LAVADO
             const hoy = new Date().setHours(0,0,0,0);
             const dLavado = new Date(estadoAuto.ultimoLavado).setHours(0,0,0,0);
             const dias = Math.floor(Math.abs(hoy - dLavado) / 86400000);
@@ -206,13 +200,12 @@
                 <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl shadow-xl">
                     <p class="text-sm font-bold text-zinc-100 mb-4">El último lavado fue hace <span class="${dias > 7 ? 'text-orange-500' : 'text-blue-500'} font-black">${dias} días</span>.</p>
                     <div class="flex gap-2">
-                        <input type="date" id="fecha-lavado" class="flex-grow bg-black border border-zinc-800 text-zinc-400 p-3 rounded-xl text-xs outline-none">
-                        <button onclick="guardarLavadoManual()" class="bg-blue-600 text-white px-4 rounded-xl shadow-lg active:scale-95 transition-all"><i data-lucide="check"></i></button>
+                        <input type="date" id="fecha-lavado" class="flex-grow bg-black border border-zinc-800 text-zinc-400 p-3 rounded-xl text-xs outline-none focus:border-blue-500">
+                        <button onclick="guardarLavadoManual()" class="bg-blue-600 text-white px-5 rounded-xl shadow-lg active:scale-95 transition-transform"><i data-lucide="check"></i></button>
                     </div>
-                    <p class="text-[9px] text-zinc-700 mt-2 uppercase text-center font-mono italic">Último registro por: ${estadoAuto.por}</p>
+                    <p class="text-[9px] text-zinc-700 mt-2 uppercase text-center font-mono italic">Último por: ${estadoAuto.por}</p>
                 </div>`;
 
-            // BITÁCORA
             const lista = document.getElementById('lista-cargas');
             lista.innerHTML = historialCargas.slice(0, 3).map(c => `
                 <div class="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/40 mb-2 flex justify-between items-center text-xs backdrop-blur-sm">
@@ -237,15 +230,16 @@
                 conductorSeleccionado = c.dataset.name;
             });
             lucide.createIcons();
+            renderizarApp();
         };
     </script>
     <style>
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
-        body { background-color: #000; font-family: ui-sans-serif, system-ui, sans-serif; }
+        body { background-color: #000; font-family: ui-sans-serif, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
         ::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="p-6 max-w-md mx-auto min-h-screen pb-24 font-sans text-zinc-100">
+<body class="p-6 max-w-md mx-auto min-h-screen pb-24 text-zinc-100">
     
     <header class="mb-10 flex flex-col items-center gap-4">
         <div class="relative">
@@ -254,12 +248,12 @@
         </div>
         <div class="text-center">
             <h1 class="text-3xl font-black italic tracking-tighter uppercase leading-none text-white">ASYS<span class="text-blue-500 font-normal">AUTO</span></h1>
-            <p class="text-[10px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-2 font-mono text-center">Telemetry Management</p>
+            <p class="text-[10px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-2 font-mono">Telemetry Management</p>
         </div>
     </header>
 
-    <!-- REGISTRO OPERATIVO -->
-    <section class="bg-zinc-900/60 p-8 rounded-[3rem] border border-zinc-800/40 shadow-2xl mb-8">
+    <!-- FORMULARIO OPERATIVO -->
+    <section class="bg-zinc-900/60 p-8 rounded-[3rem] border border-zinc-800/40 shadow-2xl mb-8 relative">
         <form id="carga-form" class="space-y-6">
             <div class="grid grid-cols-3 gap-2">
                 <div data-name="Juan" class="driver-chip p-3 rounded-2xl border border-blue-500 text-center font-bold text-xs bg-blue-600 text-white cursor-pointer transition-all">Juan</div>
@@ -275,42 +269,42 @@
                 
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1">
-                        <label class="text-[9px] text-orange-600/50 font-bold uppercase ml-2 tracking-widest font-mono text-center block">kWh Llegada</label>
+                        <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2 tracking-widest font-mono text-center block">kWh Llegada</label>
                         <input type="number" step="0.1" id="kwh-llegada" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500 transition-all text-orange-400 shadow-inner" placeholder="0.0">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[9px] text-green-600/50 font-bold uppercase ml-2 tracking-widest font-mono text-center block">kWh Salida</label>
+                        <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2 tracking-widest font-mono text-center block">kWh Salida</label>
                         <input type="number" step="0.1" id="kwh-salida" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500 transition-all text-green-400 shadow-inner" placeholder="0.0">
                     </div>
                 </div>
             </div>
 
-            <div id="preview-costo" class="text-center text-[10px] font-black text-blue-500 uppercase tracking-widest bg-blue-500/10 py-3 rounded-xl border border-blue-500/20">
+            <div id="preview-costo" class="text-center text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-950/50 py-3 rounded-xl border border-zinc-800/50 transition-all">
                 Esperando telemetría de energía...
             </div>
 
             <label class="flex items-center justify-between p-5 bg-black/40 border border-zinc-800/40 rounded-2xl cursor-pointer">
-                <span class="text-xs font-bold text-zinc-400">Carga al 100% (Celda Nivelada)</span>
+                <span class="text-xs font-bold text-zinc-400 uppercase tracking-tighter">Carga al 100%</span>
                 <input type="checkbox" id="es-cien" class="w-6 h-6 rounded-lg accent-blue-600">
             </label>
 
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-[2.5rem] font-black tracking-[0.2em] text-sm shadow-xl active:scale-95 transition-all">REGISTRAR CARGA</button>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-[2.5rem] font-black tracking-[0.2em] text-sm shadow-xl shadow-blue-900/30 active:scale-95 transition-all">REGISTRAR CARGA</button>
         </form>
     </section>
 
-    <!-- EXPLORADOR DE CARGA -->
-    <section class="mb-8 grid grid-cols-2 gap-4">
+    <!-- NAVEGACIÓN -->
+    <div class="mb-8 grid grid-cols-2 gap-4">
         <button onclick="abrirMapaCarga()" class="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-all shadow-xl">
-            <div class="p-2 bg-red-500/10 rounded-xl text-red-500"><i data-lucide="map-pin"></i></div>
-            <p class="text-[9px] font-black uppercase text-zinc-500 tracking-tighter">Puntos Cercanos</p>
+            <div class="p-2 bg-red-500/10 rounded-xl text-red-500 shadow-inner"><i data-lucide="map-pin"></i></div>
+            <p class="text-[9px] font-black uppercase text-zinc-500 tracking-tighter">Cargadores</p>
         </button>
         <button onclick="abrirUteMueve()" class="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-95 transition-all text-center shadow-xl">
-            <div class="p-2 bg-blue-500/10 rounded-xl text-blue-500"><i data-lucide="zap"></i></div>
+            <div class="p-2 bg-blue-500/10 rounded-xl text-blue-500 shadow-inner"><i data-lucide="zap"></i></div>
             <p class="text-[9px] font-black uppercase text-zinc-500 tracking-tighter">Web UTE Mueve</p>
         </button>
-    </section>
+    </div>
 
-    <!-- DASHBOARD -->
+    <!-- PANEL DE CONTROL -->
     <div id="card-mantenimiento" class="mb-4"></div>
     <div id="card-ahorro" class="mb-4"></div>
     <div id="card-lavado" class="mb-10"></div>
@@ -318,7 +312,7 @@
     <!-- BITÁCORA -->
     <div class="flex justify-between items-center px-2 mb-6">
         <h3 class="text-[10px] font-black text-zinc-800 uppercase tracking-[0.4em]">Historial Reciente</h3>
-        <button onclick="exportarReporte()" class="text-blue-500 text-[10px] font-black uppercase flex items-center gap-2 bg-blue-500/10 px-4 py-2 rounded-full border border-blue-500/20 active:scale-90 transition-all">
+        <button onclick="exportarReporte()" class="text-blue-500 text-[10px] font-black uppercase flex items-center gap-2 bg-blue-500/10 px-4 py-2 rounded-full border border-blue-500/20 active:scale-90 transition-all shadow-lg">
             <i data-lucide="file-down" class="w-3"></i> Exportar PDF
         </button>
     </div>
@@ -326,3 +320,5 @@
 
 </body>
 </html>
+
+
