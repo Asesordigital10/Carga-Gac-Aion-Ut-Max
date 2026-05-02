@@ -10,7 +10,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBlrsjN8s3iN0NRiuemEowIIwVqtkkWlOo",
@@ -21,7 +21,6 @@
             appId: "1:77118717320:web:93ee651259cc7866438e3d"
         };
 
-        // CONSTANTES
         const PRECIO_KWH_BASE = 4.76;
         const PRECIO_CONEXION_BASE = 100;
         const IVA = 1.22;
@@ -34,156 +33,231 @@
 
         let user = null;
         let historialCargas = [];
-        let estadoAuto = { ultimoLavado: Date.now() };
+        let estadoAuto = { ultimoLavado: Date.now(), por: "Nadie" };
         let conductorSeleccionado = "Juan";
 
-        // SELECTOR DE CONDUCTOR
         const selectorConductores = document.querySelectorAll('.driver-chip');
         selectorConductores.forEach(chip => {
             chip.addEventListener('click', () => {
-                selectorConductores.forEach(c => c.classList.replace('bg-blue-600', 'bg-zinc-800'));
-                chip.classList.replace('bg-zinc-800', 'bg-blue-600');
+                selectorConductores.forEach(c => {
+                    c.classList.remove('bg-blue-600', 'text-white');
+                    c.classList.add('bg-zinc-800', 'text-zinc-400');
+                });
+                chip.classList.remove('bg-zinc-800', 'text-zinc-400');
+                chip.classList.add('bg-blue-600', 'text-white');
                 conductorSeleccionado = chip.dataset.name;
             });
         });
 
-        // INICIO Y SINCRONIZACIÓN
-        signInAnonymously(auth);
+        signInAnonymously(auth).catch(e => console.error("Error Auth:", e));
+
         onAuthStateChanged(auth, (u) => {
             if (u) {
                 user = u;
                 // Escuchar Cargas
-                onSnapshot(query(collection(db, 'cargas'), orderBy('fecha', 'desc')), (snap) => {
+                const qCargas = query(collection(db, 'cargas'), orderBy('fecha', 'desc'));
+                onSnapshot(qCargas, (snap) => {
                     historialCargas = snap.docs.map(d => d.data());
                     renderizarApp();
-                });
-                // Escuchar Estado (Lavado)
+                }, (err) => console.error("Error Cargas:", err));
+
+                // Escuchar Estado Lavado
                 onSnapshot(doc(db, 'estado', 'general'), (snap) => {
                     if (snap.exists()) {
                         estadoAuto = snap.data();
-                        renderizarApp();
                     }
-                });
+                    renderizarApp();
+                }, (err) => console.error("Error Estado:", err));
             }
         });
 
-        // FUNCIONES DE REGISTRO
         window.registrarLavado = async () => {
+            if(!user) return;
             try {
-                await setDoc(doc(db, 'estado', 'general'), { ultimoLavado: Date.now(), por: conductorSeleccionado });
+                await setDoc(doc(db, 'estado', 'general'), { 
+                    ultimoLavado: Date.now(), 
+                    por: conductorSeleccionado 
+                });
                 alert("¡Lavado registrado por " + conductorSeleccionado + "!");
-            } catch (e) { console.error(e); }
+            } catch (e) { alert("Error al registrar lavado"); }
         };
 
         document.getElementById('carga-form').onsubmit = async (e) => {
             e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.disabled = true;
+            btn.innerText = "GUARDANDO...";
+
             const km = parseFloat(document.getElementById('km').value);
             const kwh = parseFloat(document.getElementById('kwh').value);
             const esCien = document.getElementById('es-cien').checked;
+            
             const costo = (kwh * PRECIO_KWH_BASE * IVA) + (PRECIO_CONEXION_BASE * IVA);
             let ahorro = 0;
 
             if (historialCargas.length > 0) {
-                const dist = km - historialCargas[0].km;
-                if (dist > 0) ahorro = ((dist / RENDIMIENTO_VERSA_KML) * PRECIO_NAFTA_L) - costo;
+                const ultimoKm = historialCargas[0].km;
+                const dist = km - ultimoKm;
+                if (dist > 0) {
+                    const costoNaftaEquiv = (dist / RENDIMIENTO_VERSA_KML) * PRECIO_NAFTA_L;
+                    ahorro = costoNaftaEquiv - costo;
+                }
             }
 
-            await addDoc(collection(db, 'cargas'), {
-                fecha: Date.now(), km, kwh, conductor: conductorSeleccionado, esCien, costo, ahorro
-            });
-            e.target.reset();
+            try {
+                await addDoc(collection(db, 'cargas'), {
+                    fecha: Date.now(),
+                    km, kwh, conductor: conductorSeleccionado,
+                    esCien, costo, ahorro
+                });
+                e.target.reset();
+                alert("¡Carga guardada!");
+            } catch (err) {
+                alert("Error al guardar datos.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "REGISTRAR CARGA";
+            }
         };
 
         function renderizarApp() {
-            const kmActual = historialCargas[0]?.km || 0;
+            const kmActual = historialCargas.length > 0 ? historialCargas[0].km : 0;
             
-            // Alerta Mantenimiento (Cada 10.000km, avisa 200km antes)
-            const kmParaService = 10000 - (kmActual % 10000);
+            // 1. Alerta Mantenimiento
             const alertaService = document.getElementById('alerta-service');
-            if (kmParaService <= 200 && kmActual > 0) {
-                alertaService.classList.remove('hidden');
-                alertaService.innerHTML = `<div class="bg-blue-600/20 border border-blue-500 p-4 rounded-2xl flex items-center gap-3 text-blue-400 mb-4">
-                    <i data-lucide="wrench"></i>
-                    <p class="text-sm font-bold">¡Service cerca! Faltan ${kmParaService} km para los ${Math.ceil(kmActual/10000)*10000} km.</p>
-                </div>`;
-            } else { alertaService.classList.add('hidden'); }
+            if (kmActual > 0) {
+                const proximoService = Math.ceil((kmActual + 1) / 10000) * 10000;
+                const faltan = proximoService - kmActual;
+                if (faltan <= 200) {
+                    alertaService.classList.remove('hidden');
+                    alertaService.innerHTML = `
+                        <div class="bg-blue-600/20 border border-blue-500/50 p-4 rounded-2xl flex items-center gap-3 text-blue-400 mb-4">
+                            <i data-lucide="wrench" class="w-5 h-5"></i>
+                            <p class="text-sm font-bold tracking-tight">¡Service cerca! Faltan ${faltan} km para los ${proximoService.toLocaleString()} km.</p>
+                        </div>`;
+                } else { alertaService.classList.add('hidden'); }
+            }
 
-            // Alerta Nivelación
-            const necesitaNivelar = historialCargas.findIndex(c => c.esCien) >= 5 || historialCargas.findIndex(c => c.esCien) === -1;
+            // 2. Alerta Nivelación
+            const indexCien = historialCargas.findIndex(c => c.esCien);
+            const necesitaNivelar = (indexCien >= 5 || indexCien === -1) && historialCargas.length > 0;
             document.getElementById('alerta-nivelacion').className = necesitaNivelar ? 'block mb-4' : 'hidden';
 
-            // Card de Lavado
-            const diasLavado = Math.floor((Date.now() - estadoAuto.ultimoLavado) / (1000*60*60*24));
-            document.getElementById('card-lavado').innerHTML = `
-                <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 flex justify-between items-center">
-                    <div>
-                        <p class="text-[10px] text-zinc-500 uppercase font-bold">Último Lavado</p>
-                        <p class="text-lg font-bold ${diasLavado > 7 ? 'text-orange-400' : 'text-zinc-200'}">${diasLavado === 0 ? '¡Hoy!' : 'Hace ' + diasLavado + ' días'}</p>
-                    </div>
-                    <button onclick="registrarLavado()" class="bg-zinc-800 hover:bg-zinc-700 p-3 rounded-xl transition-all">
-                        <i data-lucide="droplets" class="text-blue-400"></i>
-                    </button>
-                </div>`;
-
-            // Ahorro
+            // 3. Stats Ahorro
             const totalAhorro = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
             document.getElementById('stats-ahorro').innerHTML = `
-                <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
-                    <p class="text-zinc-500 text-[10px] uppercase font-bold">Ahorro vs Versa</p>
+                <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 shadow-xl">
+                    <p class="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Ahorro vs Versa</p>
                     <p class="text-2xl font-black text-green-500">$ ${totalAhorro.toLocaleString('es-UY', {maximumFractionDigits:0})}</p>
                 </div>`;
 
-            // Historial
-            listaCargas.innerHTML = historialCargas.slice(0, 3).map(c => `
-                <div class="bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/50 mb-2 flex justify-between text-xs">
-                    <div><span class="font-bold text-blue-400">${c.conductor}</span><br>${c.km.toLocaleString()} km</div>
-                    <div class="text-right text-zinc-500">${new Date(c.fecha).toLocaleDateString()}<br><span class="text-green-500">$${c.costo.toFixed(0)}</span></div>
-                </div>`).join('');
+            // 4. Card Lavado
+            const diasLavado = Math.floor((Date.now() - (estadoAuto.ultimoLavado || Date.now())) / (1000*60*60*24));
+            document.getElementById('card-lavado').innerHTML = `
+                <div class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 shadow-xl flex justify-between items-center">
+                    <div>
+                        <p class="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Último Lavado</p>
+                        <p class="text-lg font-bold ${diasLavado > 7 ? 'text-orange-400' : 'text-zinc-200'}">
+                            ${diasLavado === 0 ? '¡Hoy!' : 'Hace ' + diasLavado + ' d'}
+                        </p>
+                    </div>
+                    <button onclick="registrarLavado()" class="bg-zinc-800 hover:bg-blue-600/20 p-3 rounded-xl transition-all border border-zinc-700">
+                        <i data-lucide="droplets" class="text-blue-400 w-5 h-5"></i>
+                    </button>
+                </div>`;
+
+            // 5. Historial
+            const listaCargas = document.getElementById('lista-cargas');
+            if (historialCargas.length === 0) {
+                listaCargas.innerHTML = '<p class="text-zinc-600 text-center py-6 text-sm">Esperando primer registro...</p>';
+            } else {
+                listaCargas.innerHTML = historialCargas.slice(0, 3).map(c => `
+                    <div class="bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/50 mb-2 flex justify-between items-center">
+                        <div>
+                            <span class="text-[10px] font-black text-blue-500 uppercase tracking-tighter">${c.conductor}</span>
+                            <p class="text-sm font-bold text-zinc-300">${c.km.toLocaleString()} km</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-bold text-green-600">$${c.costo.toFixed(0)}</p>
+                            <p class="text-[9px] text-zinc-600 font-medium">${new Date(c.fecha).toLocaleDateString()}</p>
+                        </div>
+                    </div>`).join('');
+            }
             
             lucide.createIcons();
         }
+
+        // Ejecutar render inicial
+        window.onload = () => {
+            renderizarApp();
+            lucide.createIcons();
+        };
     </script>
 </head>
-<body class="p-5 max-w-md mx-auto bg-black text-zinc-100 pb-10">
-    <header class="mb-6 flex justify-between items-center">
-        <h1 class="text-xl font-black italic">AION<span class="text-blue-500">MAX</span></h1>
-        <div class="text-[10px] bg-zinc-800 px-2 py-1 rounded text-zinc-400 font-bold uppercase tracking-tighter">Gasto Casa Pro v2</div>
+<body class="p-5 max-w-md mx-auto bg-black text-zinc-100 min-h-screen pb-10">
+    
+    <header class="mb-6 flex justify-between items-end">
+        <div>
+            <h1 class="text-2xl font-black italic tracking-tighter">AION<span class="text-blue-500">MAX</span></h1>
+            <p class="text-[9px] text-zinc-600 uppercase font-bold tracking-[0.2em]">Bitácora de Gestión</p>
+        </div>
+        <div class="text-[9px] bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-full text-zinc-500 font-bold uppercase">Gasto Casa Pro v2</div>
     </header>
 
     <div id="alerta-service" class="hidden"></div>
     <div id="alerta-nivelacion" class="hidden">
-        <div class="bg-orange-500/10 border border-orange-500/50 p-4 rounded-2xl flex items-center gap-3 text-orange-500">
-            <i data-lucide="battery-warning"></i>
-            <p class="text-sm font-bold">Toca carga al 100% (Nivelación).</p>
+        <div class="bg-orange-500/10 border border-orange-500/50 p-4 rounded-2xl flex items-center gap-3 text-orange-500 mb-4">
+            <i data-lucide="battery-warning" class="w-6 h-6"></i>
+            <p class="text-sm font-bold">Nivelación recomendada (Carga al 100%).</p>
         </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-3 mb-6">
+    <div class="grid grid-cols-2 gap-3 mb-8">
         <div id="stats-ahorro"></div>
         <div id="card-lavado"></div>
     </div>
 
-    <section class="bg-zinc-900 p-6 rounded-3xl border border-zinc-800 mb-8">
-        <form id="carga-form" class="space-y-4">
+    <section class="bg-zinc-900/40 p-6 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl mb-10">
+        <h2 class="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-6 text-center">Registrar Nueva Carga</h2>
+        <form id="carga-form" class="space-y-6">
             <div class="grid grid-cols-3 gap-2">
-                <div data-name="Juan" class="driver-chip p-2 rounded-xl border border-zinc-700 text-center font-bold text-xs bg-blue-600 text-white">Juan</div>
-                <div data-name="Tania" class="driver-chip p-2 rounded-xl border border-zinc-700 text-center font-bold text-xs bg-zinc-800 text-zinc-400">Tania</div>
-                <div data-name="Mauri" class="driver-chip p-2 rounded-xl border border-zinc-700 text-center font-bold text-xs bg-zinc-800 text-zinc-400">Mauri</div>
+                <div data-name="Juan" class="driver-chip p-3 rounded-2xl border border-zinc-800 text-center font-bold text-xs bg-blue-600 text-white cursor-pointer">Juan</div>
+                <div data-name="Tania" class="driver-chip p-3 rounded-2xl border border-zinc-800 text-center font-bold text-xs bg-zinc-800 text-zinc-400 cursor-pointer">Tania</div>
+                <div data-name="Mauri" class="driver-chip p-3 rounded-2xl border border-zinc-800 text-center font-bold text-xs bg-zinc-800 text-zinc-400 cursor-pointer">Mauri</div>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-                <input type="number" id="km" required class="bg-black border border-zinc-800 p-3 rounded-xl text-center font-bold" placeholder="KM Actual">
-                <input type="number" step="0.1" id="kwh" required class="bg-black border border-zinc-800 p-3 rounded-xl text-center font-bold" placeholder="kWh">
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-1">
+                    <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2">KM Actual</label>
+                    <input type="number" id="km" required class="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-center font-bold text-lg focus:border-blue-500 transition-all outline-none" placeholder="0">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2">kWh Cargados</label>
+                    <input type="number" step="0.1" id="kwh" required class="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-center font-bold text-lg focus:border-blue-500 transition-all outline-none" placeholder="0.0">
+                </div>
             </div>
-            <label class="flex items-center justify-between px-2 text-xs text-zinc-400">
-                <span>¿Cargaste al 100%?</span>
-                <input type="checkbox" id="es-cien" class="w-5 h-5 accent-blue-500">
+
+            <label class="flex items-center justify-between p-4 bg-zinc-950/50 border border-zinc-800/50 rounded-2xl cursor-pointer active:bg-zinc-900 transition-colors">
+                <span class="text-xs font-bold text-zinc-400">¿Se cargó al 100%?</span>
+                <input type="checkbox" id="es-cien" class="w-6 h-6 rounded-lg accent-blue-600">
             </label>
-            <button type="submit" class="w-full bg-blue-600 p-4 rounded-2xl font-black tracking-widest text-sm">REGISTRAR CARGA</button>
+
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-2xl font-black tracking-[0.1em] text-sm shadow-lg shadow-blue-900/20 transition-all active:scale-95 disabled:opacity-50">
+                REGISTRAR CARGA
+            </button>
         </form>
     </section>
 
-    <h3 class="text-[10px] font-bold text-zinc-500 uppercase mb-3 tracking-widest">Actividad Reciente</h3>
-    <div id="lista-cargas"></div>
+    <div class="px-2">
+        <h3 class="text-[10px] font-black text-zinc-600 uppercase mb-4 tracking-[0.2em] flex items-center gap-2">
+            <span class="w-8 h-[1px] bg-zinc-800"></span> Actividad Reciente
+        </h3>
+        <div id="lista-cargas"></div>
+    </div>
+
+    <footer class="mt-12 text-center opacity-20">
+        <p class="text-[8px] font-bold uppercase tracking-[0.3em]">Built for the Aion MAX Experience</p>
+    </footer>
 
     <script>lucide.createIcons();</script>
 </body>
