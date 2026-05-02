@@ -10,7 +10,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // CONFIGURACIÓN DE JUAN CARLOS
         const firebaseConfig = {
@@ -55,33 +55,58 @@
         // FIREBASE SYNC
         const initApp = async () => {
             try {
-                await signInAnonymously(auth);
-            } catch (err) { console.error("Error Auth:", err); }
+                // Autenticación primero
+                const cred = await signInAnonymously(auth);
+                console.log("Autenticado como:", cred.user.uid);
+            } catch (err) { 
+                console.error("Error Auth:", err);
+                mostrarError("Error al conectar con el servidor. Revisa tu conexión.");
+            }
 
             onAuthStateChanged(auth, (u) => {
                 if (u) {
                     user = u;
-                    // Escuchar Cargas
+                    // Escuchar Cargas con callback de error
                     const cargasRef = collection(db, 'artifacts', appId, 'public', 'data', 'cargas');
-                    onSnapshot(cargasRef, (snap) => {
-                        historialCargas = snap.docs.map(d => d.data())
-                            .sort((a, b) => b.fecha - a.fecha);
+                    const qCargas = query(cargasRef, orderBy('fecha', 'desc'));
+                    
+                    onSnapshot(qCargas, (snap) => {
+                        historialCargas = snap.docs.map(d => d.data());
                         renderizarApp();
+                    }, (error) => {
+                        console.error("Error en Cargas:", error);
+                        if (error.code === 'permission-denied') {
+                            mostrarError("Permiso denegado en Cargas. Revisa las reglas en Firebase.");
+                        }
                     });
-                    // Escuchar Lavado
+
+                    // Escuchar Lavado con callback de error
                     const estadoRef = doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general');
                     onSnapshot(estadoRef, (snap) => {
                         if (snap.exists()) {
                             estadoAuto = snap.data();
                             renderizarApp();
                         }
+                    }, (error) => {
+                        console.error("Error en Estado:", error);
+                        if (error.code === 'permission-denied') {
+                            mostrarError("Permiso denegado en Lavado. Revisa las reglas en Firebase.");
+                        }
                     });
                 }
             });
         };
 
-        // REGISTRAR LAVADO (MANUAL CON CALENDARIO)
+        function mostrarError(mensaje) {
+            const errorDiv = document.getElementById('error-overlay');
+            errorDiv.innerText = mensaje;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+        }
+
+        // REGISTRAR LAVADO
         window.guardarLavadoManual = async () => {
+            if (!user) return alert("Espera a que la app conecte...");
             const fechaInput = document.getElementById('fecha-lavado').value;
             if (!fechaInput) return alert("Selecciona un día en el calendario");
             
@@ -95,12 +120,17 @@
                     por: conductorSeleccionado 
                 });
                 alert("Lavado registrado con éxito");
-            } catch (e) { console.error(e); }
+            } catch (e) { 
+                console.error(e);
+                alert("Error de permisos: No se pudo guardar el lavado.");
+            }
         };
 
         // GUARDAR CARGA
         document.getElementById('carga-form').onsubmit = async (e) => {
             e.preventDefault();
+            if (!user) return alert("Espera a que la app conecte...");
+
             const km = parseFloat(document.getElementById('km').value);
             const kwh = parseFloat(document.getElementById('kwh').value);
             const esCien = document.getElementById('es-cien').checked;
@@ -109,7 +139,8 @@
             let ahorro = 0;
 
             if (historialCargas.length > 0) {
-                const dist = km - historialCargas[0].km;
+                const ultimoKm = historialCargas[0].km;
+                const dist = km - ultimoKm;
                 if (dist > 0) {
                     const costoNaftaEquiv = (dist / RENDIMIENTO_VERSA_KML) * PRECIO_NAFTA_L;
                     ahorro = costoNaftaEquiv - costo;
@@ -122,7 +153,11 @@
                     fecha: Date.now(), km, kwh, conductor: conductorSeleccionado, esCien, costo, ahorro
                 });
                 e.target.reset();
-            } catch (e) { console.error(e); }
+                alert("Carga guardada correctamente");
+            } catch (e) { 
+                console.error(e);
+                alert("Error de permisos: No se pudo guardar la carga.");
+            }
         };
 
         function renderizarApp() {
@@ -156,7 +191,7 @@
                     <div class="h-full bg-blue-600 transition-all duration-1000" style="width: ${progreso}%"></div>
                 </div>`;
 
-            // CARD LAVADO (REDISEÑO SEGÚN PEDIDO)
+            // CARD LAVADO
             const hoy = new Date().setHours(0,0,0,0);
             const dLavado = new Date(estadoAuto.ultimoLavado).setHours(0,0,0,0);
             const dias = Math.floor(Math.abs(hoy - dLavado) / (1000 * 60 * 60 * 24));
@@ -221,10 +256,13 @@
     <style>
         input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
         body { background-color: #000; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+        #error-overlay { background: rgba(220, 38, 38, 0.9); }
     </style>
 </head>
 <body class="p-5 max-w-md mx-auto min-h-screen pb-16">
     
+    <div id="error-overlay" class="fixed top-0 left-0 w-full p-4 text-white text-center font-bold hidden z-50"></div>
+
     <header class="mb-8 flex justify-between items-center">
         <div>
             <h1 class="text-3xl font-black italic tracking-tighter uppercase leading-none text-white">AION<span class="text-blue-500 font-medium">MAX</span></h1>
