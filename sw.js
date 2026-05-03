@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asysauto-v4';
+const CACHE_NAME = 'asysauto-v5';
 const assets = ['./', './index.html', './logoasys.png', './manifest.json'];
 
 self.addEventListener('install', e => {
