@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASYS AUTO - Multi-Tariff</title>
+    <title>ASYS AUTO - Intelligence</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
@@ -31,7 +31,6 @@
         };
 
         const RENDIMIENTO_ANTERIOR_KML = 12;
-        const PRECIO_NAFTA_REF = 88.03;
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -49,17 +48,36 @@
             nombreTaller: "Service Oficial GAC",
             direccionTaller: "Av. Italia 1234, Montevideo",
             telefonoTaller: "099123456",
+            // Tarifas eléctricas
             precios: {
                 empresa: 4.76,
                 hogarValle: 2.32,
                 uteLenta: 18.50,
                 uteRapida: 25.00,
-                wallboxEspecial: 12.00 // Nueva tarifa para parkings/otros
+                wallboxEspecial: 12.00
+            },
+            // Tarifas de combustible (Editables)
+            combustibles: {
+                "Super 95": 88.03,
+                "Premium 97": 90.09,
+                "Gasoil 10S": 66.27,
+                "Gasoil 50S": 57.72
             }
         };
 
         if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) {
-            window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); });
+            window.addEventListener('load', () => { 
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    reg.onupdatefound = () => {
+                        const installingWorker = reg.installing;
+                        installingWorker.onstatechange = () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                window.location.reload();
+                            }
+                        };
+                    };
+                });
+            });
         }
 
         signInAnonymously(auth);
@@ -89,12 +107,17 @@
                 document.getElementById('conf-taller').value = estadoAuto.nombreTaller || "";
                 document.getElementById('conf-direccion').value = estadoAuto.direccionTaller || "";
                 document.getElementById('conf-tel').value = estadoAuto.telefonoTaller || "";
-                // Precios
+                // Precios Electricidad
                 document.getElementById('p-empresa').value = estadoAuto.precios?.empresa || 4.76;
                 document.getElementById('p-hogar').value = estadoAuto.precios?.hogarValle || 2.32;
                 document.getElementById('p-ute-l').value = estadoAuto.precios?.uteLenta || 18.50;
                 document.getElementById('p-ute-r').value = estadoAuto.precios?.uteRapida || 25.00;
                 document.getElementById('p-wallbox').value = estadoAuto.precios?.wallboxEspecial || 12.00;
+                // Precios Combustible
+                document.getElementById('p-super').value = estadoAuto.combustibles?.["Super 95"] || 88.03;
+                document.getElementById('p-premium').value = estadoAuto.combustibles?.["Premium 97"] || 90.09;
+                document.getElementById('p-gasoil10').value = estadoAuto.combustibles?.["Gasoil 10S"] || 66.27;
+                document.getElementById('p-gasoil50').value = estadoAuto.combustibles?.["Gasoil 50S"] || 57.72;
             }
         };
 
@@ -112,11 +135,21 @@
                     uteLenta: parseFloat(document.getElementById('p-ute-l').value),
                     uteRapida: parseFloat(document.getElementById('p-ute-r').value),
                     wallboxEspecial: parseFloat(document.getElementById('p-wallbox').value)
+                },
+                combustibles: {
+                    "Super 95": parseFloat(document.getElementById('p-super').value),
+                    "Premium 97": parseFloat(document.getElementById('p-premium').value),
+                    "Gasoil 10S": parseFloat(document.getElementById('p-gasoil10').value),
+                    "Gasoil 50S": parseFloat(document.getElementById('p-gasoil50').value)
                 }
             };
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general'), nuevosDatos, { merge: true });
             window.toggleConfig();
-            alert("Precios y datos guardados");
+            alert("Sistema Actualizado");
+        };
+
+        window.cambiarCombustibleComparativo = async (tipo) => {
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general'), { combustibleComparativo: tipo }, { merge: true });
         };
 
         window.actualizarPreviewCosto = () => {
@@ -129,7 +162,8 @@
                 const kwhCargados = Math.max(0, salida - llegada);
                 const precioUnidad = estadoAuto.precios[tarifaKey];
                 const costo = (kwhCargados * precioUnidad * 1.22) + (100 * 1.22);
-                previewEl.innerHTML = `<span class="text-blue-400">${kwhCargados.toFixed(1)} kWh</span> | <span class="text-green-500">$${costo.toFixed(0)}</span>`;
+                previewEl.innerHTML = `<span class="text-blue-400 font-black">${kwhCargados.toFixed(1)} kWh</span> | <span class="text-green-500 font-black">$${costo.toFixed(0)}</span>`;
+                previewEl.className = "text-center text-[11px] font-bold uppercase tracking-widest bg-zinc-900 py-4 rounded-2xl border border-blue-500/30";
             }
         };
 
@@ -152,13 +186,14 @@
             const esCien = document.getElementById('es-cien').checked;
             
             const kwhTotales = kwhSalida - kwhLlegada;
-            const precioUnidad = estadoAuto.precios[tarifaKey];
-            const costo = (kwhTotales * precioUnidad * 1.22) + (100 * 1.22);
+            const precioElec = estadoAuto.precios[tarifaKey];
+            const costo = (kwhTotales * precioElec * 1.22) + (100 * 1.22);
             
             let ahorro = 0;
             if (historialCargas.length > 0) {
                 const dist = km - historialCargas[0].km;
-                if (dist > 0) ahorro = ((dist / RENDIMIENTO_ANTERIOR_KML) * PRECIO_NAFTA_REF) - costo;
+                const precioCombRef = estadoAuto.combustibles[estadoAuto.combustibleComparativo];
+                if (dist > 0) ahorro = ((dist / RENDIMIENTO_ANTERIOR_KML) * precioCombRef) - costo;
             }
             
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'cargas'), { 
@@ -174,9 +209,37 @@
             const faltan = proximoService - kmActual;
             const progreso = ((10000 - (faltan > 10000 ? 10000 : faltan)) / 10000) * 100;
 
+            // CARD BATERIA
+            let cargasDesdeCien = 0;
+            for (let c of historialCargas) { if (c.esCien) break; cargasDesdeCien++; }
+            const necesitaBal = cargasDesdeCien >= 4;
+            document.getElementById('card-bateria').innerHTML = `
+                <div class="bg-zinc-900 border ${necesitaBal ? 'border-purple-500 ring-2 ring-purple-500/20 shadow-purple-900/10' : 'border-zinc-800'} p-6 rounded-[2.5rem] shadow-xl">
+                    <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Salud Batería (Balanceo LFP)</p>
+                    <p class="text-2xl font-black ${necesitaBal ? 'text-purple-400' : 'text-zinc-100'}">${necesitaBal ? 'CARGAR AL 100% HOY' : 'CARGA DIARIA (80%)'}</p>
+                    <p class="text-[9px] text-zinc-600 mt-1 uppercase font-mono">${necesitaBal ? 'Equilibrado de celdas requerido' : (5 - cargasDesdeCien) + ' cargas para el próximo balanceo'}</p>
+                </div>`;
+
+            // CARD AHORRO CON SELECTOR DE COMBUSTIBLE
+            const ahorroTotal = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
+            document.getElementById('card-ahorro').innerHTML = `
+                <div class="bg-zinc-900 border border-zinc-800 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 w-24 h-24 bg-green-500/5 blur-3xl rounded-full"></div>
+                    <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Ahorro Real vs ${estadoAuto.combustibleComparativo}</p>
+                    <p class="text-5xl font-black text-green-500 font-mono italic tracking-tighter">$ ${ahorroTotal.toLocaleString('es-UY', {maximumFractionDigits:0})}</p>
+                    
+                    <div class="mt-8 grid grid-cols-2 gap-2">
+                        ${Object.keys(estadoAuto.combustibles).map(t => `
+                            <button onclick="cambiarCombustibleComparativo('${t}')" class="p-2.5 rounded-xl border text-[9px] font-black uppercase transition-all ${estadoAuto.combustibleComparativo === t ? 'bg-green-600 border-green-500 text-white shadow-lg' : 'bg-zinc-800 border-zinc-700 text-zinc-500'}">
+                                ${t}
+                            </button>`).join('')}
+                    </div>
+                    <p class="text-[8px] text-zinc-700 mt-4 uppercase font-bold text-center tracking-widest italic">Basado en rendimiento previo de ${RENDIMIENTO_ANTERIOR_KML} km/L</p>
+                </div>`;
+
             // CARD MANTENIMIENTO
             document.getElementById('card-mantenimiento').innerHTML = `
-                <div class="bg-zinc-900 border ${faltan < 500 ? 'border-orange-500 ring-2 ring-orange-500/20' : 'border-zinc-800'} p-6 rounded-[2.5rem] shadow-2xl">
+                <div class="bg-zinc-900 border ${faltan < 500 ? 'border-orange-500 ring-2 ring-orange-500/20' : 'border-zinc-800'} p-6 rounded-[2.5rem] shadow-xl">
                     <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Mantenimiento Oficial</p>
                     <p class="text-2xl font-black ${faltan < 500 ? 'text-orange-500' : 'text-zinc-100'}">Faltan ${faltan.toLocaleString()} km</p>
                     <div class="mt-4 w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden"><div class="h-full bg-blue-600 transition-all duration-1000" style="width: ${progreso}%"></div></div>
@@ -187,29 +250,12 @@
                     </div>` : ''}
                 </div>`;
 
-            // CARD BATERIA
-            let cargasDesdeCien = 0;
-            for (let c of historialCargas) { if (c.esCien) break; cargasDesdeCien++; }
-            const necesitaBal = cargasDesdeCien >= 4;
-            document.getElementById('card-bateria').innerHTML = `
-                <div class="bg-zinc-900 border ${necesitaBal ? 'border-purple-500 ring-1' : 'border-zinc-800'} p-6 rounded-[2.5rem] shadow-xl">
-                    <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Salud Batería (Balanceo)</p>
-                    <p class="text-2xl font-black ${necesitaBal ? 'text-purple-400' : 'text-zinc-100'}">${necesitaBal ? 'CARGAR AL 100%' : 'CARGAR AL 80%'}</p>
-                </div>`;
-
-            const ahorroTotal = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
-            document.getElementById('card-ahorro').innerHTML = `
-                <div class="bg-zinc-900 border border-zinc-800 p-8 rounded-[2.5rem] text-center shadow-xl">
-                    <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Ahorro Estimado</p>
-                    <p class="text-5xl font-black text-green-500 font-mono italic">$ ${ahorroTotal.toLocaleString('es-UY', {maximumFractionDigits:0})}</p>
-                </div>`;
-
             const lista = document.getElementById('lista-cargas');
             lista.innerHTML = historialCargas.slice(0, 5).map(c => `
                 <div class="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800/40 mb-2 flex justify-between items-center text-xs backdrop-blur-sm">
                     <div class="flex items-center gap-3">
                         <div class="p-2 rounded-lg bg-zinc-800 text-blue-500 border border-zinc-700 font-black text-[8px] uppercase">${c.tarifaLabel?.substring(0,3) || 'EMP'}</div>
-                        <div><span class="font-bold text-zinc-200">${c.km.toLocaleString()} km</span><br><span class="text-[9px] text-zinc-600 italic uppercase">${c.tarifaLabel || 'Empresa'}</span></div>
+                        <div><span class="font-bold text-zinc-200">${c.km.toLocaleString()} km</span>${c.esCien ? '<span class="ml-1 text-[7px] text-purple-400 font-black uppercase">Full</span>' : ''}<br><span class="text-[9px] text-zinc-600 italic uppercase font-mono">${new Date(c.fecha).toLocaleDateString()}</span></div>
                     </div>
                     <div class="flex items-center gap-4 text-right">
                         <div class="font-mono"><span class="text-green-500 font-bold">$${c.costo.toFixed(0)}</span><br><span class="text-[9px] text-zinc-700">${c.kwhTotales.toFixed(1)} kWh</span></div>
@@ -236,7 +282,7 @@
             <img src="logoasys.png" alt="Logo" class="w-16 h-16 object-contain">
             <div>
                 <h1 class="text-2xl font-black italic tracking-tighter uppercase leading-none text-white">ASYS<span class="text-blue-500 font-normal">AUTO</span></h1>
-                <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono tracking-widest uppercase">Expert Pro</p>
+                <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono tracking-widest">Advanced Suite</p>
             </div>
         </div>
         <button onclick="toggleConfig()" class="bg-zinc-900 p-3 rounded-2xl border border-zinc-800 text-zinc-600 active:scale-90 transition-all shadow-xl">
@@ -247,56 +293,58 @@
     <!-- MODAL CONFIGURACIÓN -->
     <div id="modal-config" class="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 p-8 hidden flex flex-col no-scrollbar overflow-y-auto">
         <div class="flex justify-between items-center mb-10">
-            <h2 class="text-xl font-black uppercase italic tracking-widest text-blue-500">Ajustes</h2>
+            <h2 class="text-xl font-black uppercase italic tracking-widest text-blue-500">Configuración Pro</h2>
             <button onclick="toggleConfig()" class="text-zinc-500 p-2"><i data-lucide="x"></i></button>
         </div>
         
         <div class="space-y-8 pb-20">
+            <!-- Datos Base -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2">Usuario</p>
+                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Identificación</p>
                 <input id="conf-nombre" type="text" placeholder="Nombre" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
                 <input id="conf-modelo" type="text" placeholder="Vehículo" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
                 <input id="conf-matricula" type="text" placeholder="Matrícula" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
             </div>
 
+            <!-- Precios Nafta -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2">Precios ($/kWh)</p>
+                <p class="text-[9px] font-black text-blue-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Comparativos Nafta ($/L)</p>
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Empresa</label>
-                        <input id="p-empresa" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Super 95</label>
+                        <input id="p-super" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Hogar Valle</label>
-                        <input id="p-hogar" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Premium 97</label>
+                        <input id="p-premium" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Rápida</label>
-                        <input id="p-ute-r" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 10S</label>
+                        <input id="p-gasoil10" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Lenta</label>
-                        <input id="p-ute-l" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
-                    </div>
-                    <div class="space-y-1 col-span-2">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Wallbox / Especial</label>
-                        <input id="p-wallbox" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 50S</label>
+                        <input id="p-gasoil50" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
                     </div>
                 </div>
             </div>
 
+            <!-- Precios Luz -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2">Service</p>
-                <input id="conf-taller" type="text" placeholder="Taller" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
-                <input id="conf-direccion" type="text" placeholder="Dirección" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
-                <input id="conf-tel" type="text" placeholder="WhatsApp" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
+                <p class="text-[9px] font-black text-green-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Energía Eléctrica ($/kWh)</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Empresa</label><input id="p-empresa" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Hogar Valle</label><input id="p-hogar" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Rápida</label><input id="p-ute-r" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Lenta</label><input id="p-ute-l" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                </div>
             </div>
-            
-            <button onclick="guardarConfig()" class="w-full bg-blue-600 p-5 rounded-[2rem] font-black tracking-widest text-xs shadow-xl active:scale-95 transition-all">GUARDAR TODO</button>
+
+            <button onclick="guardarConfig()" class="w-full bg-blue-600 p-5 rounded-[2rem] font-black tracking-widest text-xs shadow-xl active:scale-95 transition-all">GUARDAR CAMBIOS</button>
         </div>
     </div>
 
-    <!-- 1º DASHBOARD SALUD -->
+    <!-- 1º DASHBOARD SALUD BATERÍA -->
     <div id="card-bateria" class="mb-4"></div>
     
     <!-- 2º NAVEGACIÓN -->
@@ -322,17 +370,17 @@
 
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1">
-                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block">kWh Inicio</label>
-                        <input type="number" step="0.1" id="kwh-llegada" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500 text-orange-400" placeholder="0.0">
+                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block text-orange-400">kWh Inicio</label>
+                        <input type="number" step="0.1" id="kwh-llegada" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500" placeholder="0.0">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block">kWh Final</label>
-                        <input type="number" step="0.1" id="kwh-salida" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500 text-green-400" placeholder="0.0">
+                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block text-green-400">kWh Final</label>
+                        <input type="number" step="0.1" id="kwh-salida" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500" placeholder="0.0">
                     </div>
                 </div>
 
                 <div class="space-y-1 pt-2">
-                    <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono">Lugar / Tarifa</label>
+                    <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono">Tarifa de Energía Usada</label>
                     <select id="tipo-tarifa" onchange="actualizarPreviewCosto()" class="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-400 font-bold appearance-none text-center">
                         <option value="empresa">Empresa (CUTCSA)</option>
                         <option value="hogarValle">Hogar (Tarifa Valle)</option>
@@ -354,9 +402,9 @@
         </form>
     </section>
 
-    <!-- DASHBOARD RESTANTE -->
-    <div id="card-mantenimiento" class="mb-4"></div>
-    <div id="card-ahorro" class="mb-12"></div>
+    <!-- DASHBOARD AHORRO -->
+    <div id="card-ahorro" class="mb-4"></div>
+    <div id="card-mantenimiento" class="mb-12"></div>
 
     <!-- BITÁCORA -->
     <div class="flex justify-between items-center px-4 mb-4">
