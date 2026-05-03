@@ -1,7 +1,7 @@
 {
   "short_name": "AsysAuto",
   "name": "ASYS AUTO - Gestión Profesional",
-  "description": "Sistema de telemetría, gestión y ahorro para vehículos 0KM",
+  "description": "Sistema de telemetría, gestión y ahorro para vehículos 0KM con balanceo de batería LFP",
   "icons": [
     {
       "src": "logoasys.png",
