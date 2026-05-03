@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asysauto-v6'; // Cambiado a v6 para forzar descarga
+const CACHE_NAME = 'asysauto-v7';
 const assets = ['./', './index.html', './logoasys.png', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -7,7 +7,7 @@ self.addEventListener('install', e => {
       return cache.addAll(assets);
     })
   );
-  self.skipWaiting(); // Obliga al nuevo SW a tomar el control inmediatamente
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
