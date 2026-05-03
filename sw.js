@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asysauto-v8'; // Versión v8 para forzar limpieza total
+const CACHE_NAME = 'asysauto-v14'; // Versión 14 obligatoria
 const assets = ['./', './index.html', './logoasys.png', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -14,10 +14,14 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => {
       return Promise.all(keys.map(key => {
-        if (key !== CACHE_NAME) return caches.delete(key);
+        if (key !== CACHE_NAME) {
+          console.log('Borrando caché antiguo:', key);
+          return caches.delete(key);
+        }
       }));
     })
   );
+  return self.clients.claim();
 });
 
 self.addEventListener('fetch', e => {
