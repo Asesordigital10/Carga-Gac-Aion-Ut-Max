@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asysauto-v7';
+const CACHE_NAME = 'asysauto-v8'; // Versión v8 para forzar limpieza total
 const assets = ['./', './index.html', './logoasys.png', './manifest.json'];
 
 self.addEventListener('install', e => {
