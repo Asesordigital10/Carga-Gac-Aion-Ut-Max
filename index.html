@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASYS AUTO - Intelligence</title>
+    <title>ASYS AUTO - Control Total</title>
     
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#000000">
@@ -48,7 +48,6 @@
             nombreTaller: "Service Oficial GAC",
             direccionTaller: "Av. Italia 1234, Montevideo",
             telefonoTaller: "099123456",
-            // Tarifas eléctricas
             precios: {
                 empresa: 4.76,
                 hogarValle: 2.32,
@@ -56,7 +55,6 @@
                 uteRapida: 25.00,
                 wallboxEspecial: 12.00
             },
-            // Tarifas de combustible (Editables)
             combustibles: {
                 "Super 95": 88.03,
                 "Premium 97": 90.09,
@@ -65,6 +63,7 @@
             }
         };
 
+        // Lógica de registro y actualización forzada de Service Worker
         if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) {
             window.addEventListener('load', () => { 
                 navigator.serviceWorker.register('sw.js').then(reg => {
@@ -72,6 +71,8 @@
                         const installingWorker = reg.installing;
                         installingWorker.onstatechange = () => {
                             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // Se detectó versión nueva, forzamos recarga total
+                                console.log("Nueva versión detectada. Recargando...");
                                 window.location.reload();
                             }
                         };
@@ -107,13 +108,11 @@
                 document.getElementById('conf-taller').value = estadoAuto.nombreTaller || "";
                 document.getElementById('conf-direccion').value = estadoAuto.direccionTaller || "";
                 document.getElementById('conf-tel').value = estadoAuto.telefonoTaller || "";
-                // Precios Electricidad
                 document.getElementById('p-empresa').value = estadoAuto.precios?.empresa || 4.76;
                 document.getElementById('p-hogar').value = estadoAuto.precios?.hogarValle || 2.32;
                 document.getElementById('p-ute-l').value = estadoAuto.precios?.uteLenta || 18.50;
                 document.getElementById('p-ute-r').value = estadoAuto.precios?.uteRapida || 25.00;
                 document.getElementById('p-wallbox').value = estadoAuto.precios?.wallboxEspecial || 12.00;
-                // Precios Combustible
                 document.getElementById('p-super').value = estadoAuto.combustibles?.["Super 95"] || 88.03;
                 document.getElementById('p-premium').value = estadoAuto.combustibles?.["Premium 97"] || 90.09;
                 document.getElementById('p-gasoil10').value = estadoAuto.combustibles?.["Gasoil 10S"] || 66.27;
@@ -145,7 +144,7 @@
             };
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general'), nuevosDatos, { merge: true });
             window.toggleConfig();
-            alert("Sistema Actualizado");
+            alert("Configuración Guardada");
         };
 
         window.cambiarCombustibleComparativo = async (tipo) => {
@@ -163,7 +162,7 @@
                 const precioUnidad = estadoAuto.precios[tarifaKey];
                 const costo = (kwhCargados * precioUnidad * 1.22) + (100 * 1.22);
                 previewEl.innerHTML = `<span class="text-blue-400 font-black">${kwhCargados.toFixed(1)} kWh</span> | <span class="text-green-500 font-black">$${costo.toFixed(0)}</span>`;
-                previewEl.className = "text-center text-[11px] font-bold uppercase tracking-widest bg-zinc-900 py-4 rounded-2xl border border-blue-500/30";
+                previewEl.className = "text-center text-[11px] font-bold uppercase tracking-widest bg-zinc-900 py-4 rounded-2xl border border-blue-500/30 shadow-inner";
             }
         };
 
@@ -175,7 +174,7 @@
         window.guiarTaller = () => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(estadoAuto.direccionTaller)}`, '_blank');
         window.abrirMapaCarga = () => window.open("https://www.google.com/maps/search/cargador+auto+electrico+uruguay", "_blank");
         window.abrirUteMueve = () => window.open("https://ute.com.uy/movilidad-electrica", "_blank");
-        window.eliminarCarga = async (id) => { if (confirm("¿Eliminar registro?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'cargas', id)); };
+        window.eliminarCarga = async (id) => { if (confirm("¿Eliminar este registro de prueba?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'cargas', id)); };
 
         document.getElementById('carga-form').onsubmit = async (e) => {
             e.preventDefault();
@@ -217,24 +216,21 @@
                 <div class="bg-zinc-900 border ${necesitaBal ? 'border-purple-500 ring-2 ring-purple-500/20 shadow-purple-900/10' : 'border-zinc-800'} p-6 rounded-[2.5rem] shadow-xl">
                     <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Salud Batería (Balanceo LFP)</p>
                     <p class="text-2xl font-black ${necesitaBal ? 'text-purple-400' : 'text-zinc-100'}">${necesitaBal ? 'CARGAR AL 100% HOY' : 'CARGA DIARIA (80%)'}</p>
-                    <p class="text-[9px] text-zinc-600 mt-1 uppercase font-mono">${necesitaBal ? 'Equilibrado de celdas requerido' : (5 - cargasDesdeCien) + ' cargas para el próximo balanceo'}</p>
+                    <p class="text-[9px] text-zinc-600 mt-1 uppercase font-mono">${necesitaBal ? 'Equilibrado requerido' : (5 - cargasDesdeCien) + ' cargas para el balanceo'}</p>
                 </div>`;
 
-            // CARD AHORRO CON SELECTOR DE COMBUSTIBLE
+            // CARD AHORRO
             const ahorroTotal = historialCargas.reduce((acc, curr) => acc + (curr.ahorro || 0), 0);
             document.getElementById('card-ahorro').innerHTML = `
                 <div class="bg-zinc-900 border border-zinc-800 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-                    <div class="absolute -right-4 -top-4 w-24 h-24 bg-green-500/5 blur-3xl rounded-full"></div>
-                    <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Ahorro Real vs ${estadoAuto.combustibleComparativo}</p>
+                    <p class="text-zinc-500 text-[10px] uppercase font-black tracking-widest mb-1">Ahorro vs ${estadoAuto.combustibleComparativo}</p>
                     <p class="text-5xl font-black text-green-500 font-mono italic tracking-tighter">$ ${ahorroTotal.toLocaleString('es-UY', {maximumFractionDigits:0})}</p>
-                    
                     <div class="mt-8 grid grid-cols-2 gap-2">
                         ${Object.keys(estadoAuto.combustibles).map(t => `
                             <button onclick="cambiarCombustibleComparativo('${t}')" class="p-2.5 rounded-xl border text-[9px] font-black uppercase transition-all ${estadoAuto.combustibleComparativo === t ? 'bg-green-600 border-green-500 text-white shadow-lg' : 'bg-zinc-800 border-zinc-700 text-zinc-500'}">
                                 ${t}
                             </button>`).join('')}
                     </div>
-                    <p class="text-[8px] text-zinc-700 mt-4 uppercase font-bold text-center tracking-widest italic">Basado en rendimiento previo de ${RENDIMIENTO_ANTERIOR_KML} km/L</p>
                 </div>`;
 
             // CARD MANTENIMIENTO
@@ -245,8 +241,8 @@
                     <div class="mt-4 w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden"><div class="h-full bg-blue-600 transition-all duration-1000" style="width: ${progreso}%"></div></div>
                     ${faltan < 500 ? `
                     <div class="mt-6 pt-4 border-t border-zinc-800 flex gap-2">
-                        <button onclick="agendarWhatsApp(${proximoService})" class="flex-1 bg-green-600/10 text-green-500 p-3 rounded-2xl text-[10px] font-black uppercase tracking-tighter">WhatsApp</button>
-                        <button onclick="guiarTaller()" class="flex-1 bg-blue-600/10 text-blue-500 p-3 rounded-2xl text-[10px] font-black uppercase tracking-tighter">GPS Taller</button>
+                        <button onclick="agendarWhatsApp(${proximoService})" class="flex-1 bg-green-600/10 text-green-500 p-3 rounded-2xl text-[10px] font-black uppercase">WhatsApp</button>
+                        <button onclick="guiarTaller()" class="flex-1 bg-blue-600/10 text-blue-500 p-3 rounded-2xl text-[10px] font-black uppercase">GPS Taller</button>
                     </div>` : ''}
                 </div>`;
 
@@ -254,12 +250,12 @@
             lista.innerHTML = historialCargas.slice(0, 5).map(c => `
                 <div class="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800/40 mb-2 flex justify-between items-center text-xs backdrop-blur-sm">
                     <div class="flex items-center gap-3">
-                        <div class="p-2 rounded-lg bg-zinc-800 text-blue-500 border border-zinc-700 font-black text-[8px] uppercase">${c.tarifaLabel?.substring(0,3) || 'EMP'}</div>
+                        <div class="p-2 rounded-lg bg-zinc-800 text-blue-500 border border-zinc-700 font-black text-[8px] uppercase tracking-tighter">${c.tarifaLabel?.substring(0,3) || 'EMP'}</div>
                         <div><span class="font-bold text-zinc-200">${c.km.toLocaleString()} km</span>${c.esCien ? '<span class="ml-1 text-[7px] text-purple-400 font-black uppercase">Full</span>' : ''}<br><span class="text-[9px] text-zinc-600 italic uppercase font-mono">${new Date(c.fecha).toLocaleDateString()}</span></div>
                     </div>
                     <div class="flex items-center gap-4 text-right">
                         <div class="font-mono"><span class="text-green-500 font-bold">$${c.costo.toFixed(0)}</span><br><span class="text-[9px] text-zinc-700">${c.kwhTotales.toFixed(1)} kWh</span></div>
-                        <button onclick="eliminarCarga('${c.id}')" class="text-zinc-800 hover:text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        <button onclick="eliminarCarga('${c.id}')" class="text-zinc-800 hover:text-red-500 transition-transform active:scale-90"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                     </div>
                 </div>`).join('');
             lucide.createIcons();
@@ -282,7 +278,7 @@
             <img src="logoasys.png" alt="Logo" class="w-16 h-16 object-contain">
             <div>
                 <h1 class="text-2xl font-black italic tracking-tighter uppercase leading-none text-white">ASYS<span class="text-blue-500 font-normal">AUTO</span></h1>
-                <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono tracking-widest">Advanced Suite</p>
+                <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono tracking-widest italic">V.14 Intelligence</p>
             </div>
         </div>
         <button onclick="toggleConfig()" class="bg-zinc-900 p-3 rounded-2xl border border-zinc-800 text-zinc-600 active:scale-90 transition-all shadow-xl">
@@ -293,73 +289,65 @@
     <!-- MODAL CONFIGURACIÓN -->
     <div id="modal-config" class="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 p-8 hidden flex flex-col no-scrollbar overflow-y-auto">
         <div class="flex justify-between items-center mb-10">
-            <h2 class="text-xl font-black uppercase italic tracking-widest text-blue-500">Configuración Pro</h2>
+            <h2 class="text-xl font-black uppercase italic tracking-widest text-blue-500">Configuración</h2>
             <button onclick="toggleConfig()" class="text-zinc-500 p-2"><i data-lucide="x"></i></button>
         </div>
         
         <div class="space-y-8 pb-20">
-            <!-- Datos Base -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Identificación</p>
+                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2">Identidad</p>
                 <input id="conf-nombre" type="text" placeholder="Nombre" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
                 <input id="conf-modelo" type="text" placeholder="Vehículo" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
                 <input id="conf-matricula" type="text" placeholder="Matrícula" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
             </div>
 
-            <!-- Precios Nafta -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-blue-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Comparativos Nafta ($/L)</p>
+                <p class="text-[9px] font-black text-blue-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2">Precios Nafta ($/L)</p>
                 <div class="grid grid-cols-2 gap-4">
-                    <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Super 95</label>
-                        <input id="p-super" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Premium 97</label>
-                        <input id="p-premium" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 10S</label>
-                        <input id="p-gasoil10" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 50S</label>
-                        <input id="p-gasoil50" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100">
-                    </div>
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Super 95</label><input id="p-super" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Premium 97</label><input id="p-premium" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 10S</label><input id="p-gasoil10" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 50S</label><input id="p-gasoil50" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
                 </div>
             </div>
 
-            <!-- Precios Luz -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-green-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Energía Eléctrica ($/kWh)</p>
+                <p class="text-[9px] font-black text-green-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2">Precios Electricidad ($/kWh)</p>
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Empresa</label><input id="p-empresa" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
                     <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Hogar Valle</label><input id="p-hogar" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
                     <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Rápida</label><input id="p-ute-r" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
                     <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Lenta</label><input id="p-ute-l" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1 col-span-2"><label class="text-[8px] text-zinc-500 uppercase ml-2">Wallbox / Especial</label><input id="p-wallbox" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-100"></div>
                 </div>
             </div>
 
+            <div class="space-y-4">
+                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2">Taller Service</p>
+                <input id="conf-taller" type="text" placeholder="Empresa" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
+                <input id="conf-direccion" type="text" placeholder="Dirección" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
+                <input id="conf-tel" type="text" placeholder="WhatsApp" class="w-full bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-300">
+            </div>
+            
             <button onclick="guardarConfig()" class="w-full bg-blue-600 p-5 rounded-[2rem] font-black tracking-widest text-xs shadow-xl active:scale-95 transition-all">GUARDAR CAMBIOS</button>
         </div>
     </div>
 
-    <!-- 1º DASHBOARD SALUD BATERÍA -->
+    <!-- DASHBOARDS -->
     <div id="card-bateria" class="mb-4"></div>
     
-    <!-- 2º NAVEGACIÓN -->
     <div class="mb-8 grid grid-cols-2 gap-4 px-1">
-        <button onclick="abrirMapaCarga()" class="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-95 shadow-xl">
+        <button onclick="abrirMapaCarga()" class="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-95 shadow-xl transition-transform">
             <div class="p-2 bg-red-500/10 rounded-xl text-red-500"><i data-lucide="map-pin"></i></div>
             <p class="text-[9px] font-black uppercase text-zinc-500 tracking-tighter">Cargadores</p>
         </button>
-        <button onclick="abrirUteMueve()" class="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-95 shadow-xl">
+        <button onclick="abrirUteMueve()" class="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl flex flex-col items-center gap-2 active:scale-95 shadow-xl transition-transform">
             <div class="p-2 bg-blue-500/10 rounded-xl text-blue-500"><i data-lucide="zap"></i></div>
             <p class="text-[9px] font-black uppercase text-zinc-500 tracking-tighter">Red UTE</p>
         </button>
     </div>
 
-    <!-- 3º FORMULARIO REGISTRO -->
+    <!-- FORMULARIO REGISTRO -->
     <section class="bg-zinc-900/60 p-8 rounded-[3.5rem] border border-zinc-800/40 shadow-2xl mb-8 relative">
         <form id="carga-form" class="space-y-6">
             <div class="space-y-5 text-center">
@@ -370,17 +358,17 @@
 
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1">
-                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block text-orange-400">kWh Inicio</label>
+                        <label class="text-[9px] text-orange-400 font-bold uppercase tracking-widest font-mono text-center block">kWh Inicio</label>
                         <input type="number" step="0.1" id="kwh-llegada" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500" placeholder="0.0">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block text-green-400">kWh Final</label>
+                        <label class="text-[9px] text-green-400 font-bold uppercase tracking-widest font-mono text-center block">kWh Final</label>
                         <input type="number" step="0.1" id="kwh-salida" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500" placeholder="0.0">
                     </div>
                 </div>
 
                 <div class="space-y-1 pt-2">
-                    <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono">Tarifa de Energía Usada</label>
+                    <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono">Tarifa Aplicada</label>
                     <select id="tipo-tarifa" onchange="actualizarPreviewCosto()" class="w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-sm outline-none text-zinc-400 font-bold appearance-none text-center">
                         <option value="empresa">Empresa (CUTCSA)</option>
                         <option value="hogarValle">Hogar (Tarifa Valle)</option>
@@ -391,7 +379,7 @@
                 </div>
             </div>
 
-            <div id="preview-costo" class="text-center text-[10px] font-bold text-zinc-700 uppercase tracking-widest bg-zinc-950 py-4 rounded-2xl border border-zinc-900 italic">TELEMETRÍA</div>
+            <div id="preview-costo" class="text-center text-[10px] font-bold text-zinc-700 uppercase tracking-widest bg-zinc-950 py-4 rounded-2xl border border-zinc-900 italic">TELEMETRÍA EN ESPERA</div>
 
             <label class="flex items-center justify-between p-5 bg-black/40 border border-zinc-800/40 rounded-2xl cursor-pointer">
                 <span class="text-xs font-bold text-zinc-300 uppercase italic">Carga al 100%</span>
