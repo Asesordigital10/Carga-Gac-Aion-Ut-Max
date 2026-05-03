@@ -53,9 +53,20 @@
         let estadoAuto = { ultimoLavado: Date.now(), por: "Sistema", combustibleComparativo: "Super 95" };
         let conductorSeleccionado = "Juan";
 
+        // Registro de Service Worker para PWA
         if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').catch(err => console.warn('PWA Mode Disabled'));
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    reg.onupdatefound = () => {
+                        const installingWorker = reg.installing;
+                        installingWorker.onstatechange = () => {
+                            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // Forzar recarga si hay actualización
+                                window.location.reload();
+                            }
+                        };
+                    };
+                });
             });
         }
 
@@ -80,7 +91,7 @@
             }
         });
 
-        // Función que calcula el costo mientras el usuario escribe
+        // Telemetría: Cálculo en vivo
         window.actualizarPreviewCosto = () => {
             const llegada = parseFloat(document.getElementById('kwh-llegada').value) || 0;
             const salida = parseFloat(document.getElementById('kwh-salida').value) || 0;
@@ -89,11 +100,11 @@
             
             const previewEl = document.getElementById('preview-costo');
             if (kwhCargados > 0) {
-                previewEl.innerText = `Llenado: ${kwhCargados.toFixed(1)} kWh | Costo: $${costo.toFixed(0)}`;
-                previewEl.className = "text-center text-[11px] font-black text-blue-400 uppercase tracking-widest bg-blue-400/10 py-3 rounded-2xl border border-blue-400/20 transition-all";
+                previewEl.innerText = `Carga: ${kwhCargados.toFixed(1)} kWh | Costo: $${costo.toFixed(0)}`;
+                previewEl.className = "text-center text-[11px] font-black text-blue-400 uppercase tracking-widest bg-blue-400/10 py-4 rounded-2xl border border-blue-400/30 transition-all";
             } else {
                 previewEl.innerText = "Esperando telemetría de energía...";
-                previewEl.className = "text-center text-[10px] font-bold text-zinc-600 uppercase tracking-widest bg-zinc-900/50 py-3 rounded-2xl border border-zinc-800/50";
+                previewEl.className = "text-center text-[10px] font-bold text-zinc-700 uppercase tracking-widest bg-zinc-950/50 py-4 rounded-2xl border border-zinc-900/50";
             }
         };
 
@@ -178,7 +189,7 @@
             const dias = Math.floor(Math.abs(hoy - new Date(estadoAuto.ultimoLavado).setHours(0,0,0,0)) / 86400000);
             document.getElementById('card-lavado').innerHTML = `
                 <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl">
-                    <p class="text-sm font-bold text-zinc-100 mb-4">Último lavado: <span class="text-blue-500">${dias} días</span>.</p>
+                    <p class="text-sm font-bold text-zinc-100 mb-4">El último lavado fue hace <span class="text-blue-500">${dias} días</span>.</p>
                     <div class="flex gap-2"><input type="date" id="fecha-lavado" class="flex-grow bg-black border border-zinc-800 text-zinc-400 p-3 rounded-xl text-xs outline-none"><button onclick="guardarLavadoManual()" class="bg-blue-600 text-white px-4 rounded-xl active:scale-90"><i data-lucide="check"></i></button></div>
                 </div>`;
 
@@ -186,7 +197,7 @@
             lista.innerHTML = historialCargas.slice(0, 5).map(c => `
                 <div class="bg-zinc-900/40 p-4 rounded-2xl border border-zinc-800/40 mb-2 flex justify-between items-center text-xs">
                     <div><span class="font-bold text-blue-500">${c.conductor}</span><br>${c.km.toLocaleString()} km</div>
-                    <div class="text-right"><span class="text-green-500 font-bold">$${c.costo.toFixed(0)}</span><br><span class="text-[9px] text-zinc-600">${c.kwhLlegada}→${c.kwhSalida}</span></div>
+                    <div class="text-right font-mono"><span class="text-green-500 font-bold">$${c.costo.toFixed(0)}</span><br><span class="text-[9px] text-zinc-600">${c.kwhLlegada}→${c.kwhSalida}</span></div>
                 </div>`).join('');
             lucide.createIcons();
         }
@@ -222,8 +233,8 @@
         </div>
     </header>
 
-    <!-- FORMULARIO OPERATIVO CON TELEMETRÍA DUAL -->
-    <section class="bg-zinc-900/60 p-8 rounded-[3rem] border border-zinc-800/40 shadow-2xl mb-8">
+    <!-- FORMULARIO ACTUALIZADO: TELEMETRÍA DUAL -->
+    <section class="bg-zinc-900/60 p-8 rounded-[3.5rem] border border-zinc-800/40 shadow-2xl mb-8">
         <form id="carga-form" class="space-y-6">
             <div class="grid grid-cols-3 gap-2">
                 <div data-name="Juan" class="driver-chip p-3 rounded-2xl border border-blue-500 text-center font-bold text-xs bg-blue-600 text-white cursor-pointer transition-all">Juan</div>
@@ -232,25 +243,25 @@
             </div>
             
             <div class="space-y-5">
-                <div class="space-y-1">
-                    <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2 tracking-widest font-mono">Kilómetros</label>
-                    <input type="number" id="km" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-600 transition-all shadow-inner" placeholder="0">
+                <div class="space-y-1 text-center">
+                    <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono">Kilometraje de la Carga</label>
+                    <input type="number" id="km" required class="w-full bg-black border border-zinc-800 p-5 rounded-2xl text-center font-black text-2xl outline-none focus:border-blue-600 transition-all shadow-inner" placeholder="0">
                 </div>
                 
                 <div class="grid grid-cols-2 gap-4">
                     <div class="space-y-1">
-                        <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2 tracking-widest font-mono text-center block">kWh Llegada</label>
+                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block">kWh Inicio</label>
                         <input type="number" step="0.1" id="kwh-llegada" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500 transition-all text-orange-400" placeholder="0.0">
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[9px] text-zinc-600 font-bold uppercase ml-2 tracking-widest font-mono text-center block">kWh Salida</label>
+                        <label class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest font-mono text-center block">kWh Final</label>
                         <input type="number" step="0.1" id="kwh-salida" oninput="actualizarPreviewCosto()" required class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-center font-black text-xl outline-none focus:border-blue-500 transition-all text-green-400" placeholder="0.0">
                     </div>
                 </div>
             </div>
 
-            <!-- Etiqueta de Costo en Tiempo Real -->
-            <div id="preview-costo" class="text-center text-[10px] font-bold text-zinc-600 uppercase tracking-widest bg-zinc-900/50 py-3 rounded-2xl border border-zinc-800/50">
+            <!-- COSTO ESTIMADO EN VIVO -->
+            <div id="preview-costo" class="text-center text-[10px] font-bold text-zinc-700 uppercase tracking-widest bg-zinc-950/50 py-4 rounded-2xl border border-zinc-900/50 transition-all">
                 Esperando telemetría de energía...
             </div>
 
@@ -259,7 +270,7 @@
                 <input type="checkbox" id="es-cien" class="w-6 h-6 rounded-lg accent-blue-600">
             </label>
 
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-[2.5rem] font-black tracking-[0.2em] text-sm shadow-xl shadow-blue-900/30 active:scale-95 transition-all uppercase">Guardar Registro</button>
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 p-5 rounded-[2.5rem] font-black tracking-[0.2em] text-sm shadow-xl shadow-blue-900/30 active:scale-95 transition-all uppercase">Registrar Actividad</button>
         </form>
     </section>
 
@@ -275,7 +286,7 @@
         </button>
     </div>
 
-    <!-- DASHBOARD -->
+    <!-- PANEL DE CONTROL -->
     <div id="card-mantenimiento" class="mb-4"></div>
     <div id="card-ahorro" class="mb-4"></div>
     <div id="card-lavado" class="mb-10"></div>
@@ -290,6 +301,7 @@
 
 </body>
 </html>
+
 
 
 
