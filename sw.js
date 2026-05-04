@@ -1,5 +1,4 @@
-
-const CACHE_NAME = 'asysauto-v23'; 
+const CACHE_NAME = 'asysauto-v24'; 
 const assets = [
   './',
   './index.html',
