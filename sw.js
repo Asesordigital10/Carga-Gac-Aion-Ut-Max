@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asysauto-v20'; // Versión 20
+const CACHE_NAME = 'asysauto-v21'; // Versión 21: Ajuste de Etiquetas en Config
 const assets = [
   './',
   './index.html',
