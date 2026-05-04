@@ -1,4 +1,5 @@
-const CACHE_NAME = 'asysauto-v21'; // Versión 21: Ajuste de Etiquetas en Config
+
+const CACHE_NAME = 'asysauto-v23'; 
 const assets = [
   './',
   './index.html',
@@ -20,7 +21,6 @@ self.addEventListener('activate', e => {
     caches.keys().then(keys => {
       return Promise.all(keys.map(key => {
         if (key !== CACHE_NAME) {
-          console.log('Borrando caché antigua:', key);
           return caches.delete(key);
         }
       }));
