@@ -63,6 +63,7 @@
             }
         };
 
+        // Service Worker v24
         if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) {
             window.addEventListener('load', () => { 
                 navigator.serviceWorker.register('sw.js').then(reg => {
@@ -122,11 +123,13 @@
                 document.getElementById('conf-taller').value = estadoAuto.nombreTaller || "";
                 document.getElementById('conf-direccion').value = estadoAuto.direccionTaller || "";
                 document.getElementById('conf-tel').value = estadoAuto.telefonoTaller || "";
+                // Restaurar Precios Electricidad
                 document.getElementById('p-empresa').value = estadoAuto.precios?.empresa || 4.76;
                 document.getElementById('p-hogar').value = estadoAuto.precios?.hogarValle || 2.32;
                 document.getElementById('p-ute-l').value = estadoAuto.precios?.uteLenta || 7.54;
                 document.getElementById('p-ute-r').value = estadoAuto.precios?.uteRapida || 10.80;
                 document.getElementById('p-wallbox').value = estadoAuto.precios?.wallboxEspecial || 12.00;
+                // Restaurar Precios Combustible
                 document.getElementById('p-super').value = estadoAuto.combustibles?.["Super 95"] || 88.03;
                 document.getElementById('p-premium').value = estadoAuto.combustibles?.["Premium 97"] || 90.09;
                 document.getElementById('p-gasoil10').value = estadoAuto.combustibles?.["Gasoil 10S"] || 66.27;
@@ -199,8 +202,8 @@
         window.guiarTaller = () => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(estadoAuto.direccionTaller)}`, '_blank');
         window.abrirMapaCarga = () => window.open("https://www.google.com/maps/search/cargador+auto+electrico+uruguay", "_blank");
         
-        // CORRECCIÓN: Ahora abre el portal de la App UTE Mueve
-        window.abrirUteMueve = () => window.open("https://utemueve.ute.com.uy/", "_blank");
+        // CORREGIDO: URL directa de UTE Mueve
+        window.abrirUteMueve = () => window.open("https://mueve.ute.com.uy/", "_blank");
         
         window.eliminarCarga = async (id) => { 
             if (!user) return;
@@ -315,9 +318,10 @@
                 <i data-lucide="settings" class="w-6 h-6"></i>
             </button>
         </div>
-        <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono italic text-center">V.23 Mueve Edition</p>
+        <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono italic text-center">V.24 Restore Plus</p>
     </header>
 
+    <!-- MODAL AJUSTES COMPLETO -->
     <div id="modal-config" class="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 p-8 hidden flex flex-col no-scrollbar overflow-y-auto">
         <div class="flex justify-between items-center mb-10">
             <h2 class="text-xl font-black uppercase italic tracking-widest text-blue-500 font-mono">Configuración</h2>
@@ -325,44 +329,95 @@
         </div>
         
         <div class="space-y-8 pb-20">
+            <!-- Sección Identidad -->
             <div class="space-y-4">
                 <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Propietario y Vehículo</p>
                 <div class="space-y-2">
-                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Nombre del Propietario</label>
-                    <input id="conf-nombre" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Ej: Juan">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Nombre</label>
+                    <input id="conf-nombre" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Nombre">
                 </div>
                 <div class="space-y-2">
-                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Modelo del Vehículo</label>
-                    <input id="conf-modelo" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Ej: Gac Aion Ut Max">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Modelo</label>
+                    <input id="conf-modelo" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Modelo">
                 </div>
                 <div class="space-y-2">
                     <label class="text-[8px] text-zinc-500 uppercase ml-2">Matrícula</label>
-                    <input id="conf-matricula" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Ej: AAA1234">
+                    <input id="conf-matricula" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Matrícula">
                 </div>
             </div>
 
+            <!-- Sección Nafta RESTAURADA -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-blue-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Nafta ($ por Litro)</p>
+                <p class="text-[9px] font-black text-blue-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Nafta ($/L)</p>
                 <div class="grid grid-cols-2 gap-4">
-                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Super 95</label><input id="p-super" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100"></div>
-                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Premium 97</label><input id="p-premium" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Super 95</label>
+                        <input id="p-super" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Premium 97</label>
+                        <input id="p-premium" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 10S</label>
+                        <input id="p-gasoil10" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 50S</label>
+                        <input id="p-gasoil50" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
                 </div>
             </div>
 
+            <!-- Sección Electricidad RESTAURADA -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-green-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Energía ($ por kWh)</p>
+                <p class="text-[9px] font-black text-green-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Energía ($/kWh)</p>
                 <div class="grid grid-cols-2 gap-4">
-                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Cutcsa / Empresa</label><input id="p-empresa" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100"></div>
-                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">Hogar (Valle)</label><input id="p-hogar" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100"></div>
-                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Rápida (DC)</label><input id="p-ute-r" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100"></div>
-                    <div class="space-y-1"><label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Lenta (AC)</label><input id="p-ute-l" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100"></div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Empresa</label>
+                        <input id="p-empresa" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Hogar Valle</label>
+                        <input id="p-hogar" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Rápida</label>
+                        <input id="p-ute-r" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Lenta</label>
+                        <input id="p-ute-l" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1 col-span-2">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Wallbox Otros</label>
+                        <input id="p-wallbox" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección Taller -->
+            <div class="space-y-4">
+                <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Taller</p>
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Nombre Taller</label>
+                    <input id="conf-taller" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Dirección GPS</label>
+                    <input id="conf-direccion" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">WhatsApp</label>
+                    <input id="conf-tel" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300">
                 </div>
             </div>
             
-            <button onclick="guardarConfig()" class="w-full bg-blue-600 p-5 rounded-[2rem] font-black tracking-widest text-xs shadow-xl active:scale-95 transition-all uppercase italic">Actualizar Ajustes</button>
+            <button onclick="guardarConfig()" class="w-full bg-blue-600 p-5 rounded-[2rem] font-black tracking-widest text-xs shadow-xl active:scale-95 transition-all uppercase italic">Guardar Configuración</button>
         </div>
     </div>
 
+    <!-- CARDS DASHBOARD -->
     <div id="card-bateria" class="mb-4"></div>
     
     <div class="mb-8 grid grid-cols-2 gap-4 px-1">
@@ -376,6 +431,7 @@
         </button>
     </div>
 
+    <!-- FORMULARIO DE REGISTRO -->
     <section class="bg-zinc-900/60 p-8 rounded-[3.5rem] border border-zinc-800/40 shadow-2xl mb-8 relative">
         <form id="carga-form" class="space-y-6">
             <div class="space-y-5 text-center">
@@ -432,5 +488,6 @@
 
 </body>
 </html>
+
 
 
