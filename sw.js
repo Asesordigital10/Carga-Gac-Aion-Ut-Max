@@ -1,5 +1,10 @@
-const CACHE_NAME = 'asysauto-v18'; // Versión 18: Nuevos textos de tarifa
-const assets = ['./', './index.html', './logoasys.png', './manifest.json'];
+const CACHE_NAME = 'asysauto-v19'; // Versión 19 oficial
+const assets = [
+  './',
+  './index.html',
+  './logoasys.png',
+  './manifest.json'
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -15,7 +20,7 @@ self.addEventListener('activate', e => {
     caches.keys().then(keys => {
       return Promise.all(keys.map(key => {
         if (key !== CACHE_NAME) {
-          console.log('Borrando caché antiguo:', key);
+          console.log('Borrando caché antigua:', key);
           return caches.delete(key);
         }
       }));
