@@ -64,7 +64,7 @@
             }
         };
 
-        // Service Worker v20
+        // Service Worker v21
         if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')) {
             window.addEventListener('load', () => { 
                 navigator.serviceWorker.register('sw.js').then(reg => {
@@ -80,22 +80,19 @@
             });
         }
 
-        // Auth optimizada para evitar errores de mismatch en este entorno
+        // Auth optimizada
         const initAuth = async () => {
             try {
-                // Si el token existe, intentamos usarlo pero capturamos el error de mismatch específicamente
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     try {
                         await signInWithCustomToken(auth, __initial_auth_token);
                     } catch (e) {
-                        // Si falla el token (mismatch), vamos a anónimo sin registrar error fatal
                         await signInAnonymously(auth);
                     }
                 } else {
                     await signInAnonymously(auth);
                 }
             } catch (error) {
-                // Fallback final
                 await signInAnonymously(auth);
             }
         };
@@ -104,18 +101,17 @@
         onAuthStateChanged(auth, (u) => {
             if (u) {
                 user = u;
-                // Listeners de Firestore con rutas estrictas
                 onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'cargas'), orderBy('fecha', 'desc')), (snap) => {
                     historialCargas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                     renderizarApp();
-                }, (err) => console.error("Error en cargas:", err));
+                }, (err) => console.error(err));
 
                 onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'estado', 'general'), (snap) => {
                     if (snap.exists()) {
                         estadoAuto = { ...estadoAuto, ...snap.data() };
                         renderizarApp();
                     }
-                }, (err) => console.error("Error en estado:", err));
+                }, (err) => console.error(err));
             }
         });
 
@@ -338,7 +334,7 @@
 </head>
 <body class="p-6 max-w-md mx-auto min-h-screen pb-24 text-zinc-100 font-sans">
     
-    <!-- HEADER CENTRADO -->
+    <!-- HEADER -->
     <header class="mb-10 flex flex-col items-center gap-4">
         <div class="relative">
             <img src="logoasys.png" alt="Logo" class="w-28 h-28 object-contain filter drop-shadow-2xl">
@@ -350,10 +346,10 @@
                 <i data-lucide="settings" class="w-6 h-6"></i>
             </button>
         </div>
-        <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono italic text-center">V.20 Tariff 2026</p>
+        <p class="text-[9px] text-zinc-700 uppercase font-bold tracking-[0.4em] mt-1 font-mono italic text-center">V.21 Final Edition</p>
     </header>
 
-    <!-- MODAL AJUSTES -->
+    <!-- MODAL AJUSTES CON ETIQUETAS MEJORADAS -->
     <div id="modal-config" class="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 p-8 hidden flex flex-col no-scrollbar overflow-y-auto">
         <div class="flex justify-between items-center mb-10">
             <h2 class="text-xl font-black uppercase italic tracking-widest text-blue-500 font-mono">Configuración</h2>
@@ -361,42 +357,91 @@
         </div>
         
         <div class="space-y-8 pb-20">
+            <!-- Sección Identidad -->
             <div class="space-y-4">
                 <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Propietario y Vehículo</p>
-                <input id="conf-nombre" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Nombre">
-                <input id="conf-modelo" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Vehículo">
-                <input id="conf-matricula" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Matrícula">
-            </div>
-
-            <div class="space-y-4">
-                <p class="text-[9px] font-black text-blue-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Nafta ($/L)</p>
-                <div class="grid grid-cols-2 gap-4">
-                    <input id="p-super" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="Super">
-                    <input id="p-premium" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="Premium">
-                    <input id="p-gasoil10" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="G10">
-                    <input id="p-gasoil50" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="G50">
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Nombre del Propietario</label>
+                    <input id="conf-nombre" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Ej: Juan Perez">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Modelo del Vehículo</label>
+                    <input id="conf-modelo" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Ej: Gac Aion Ut Max">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Matrícula</label>
+                    <input id="conf-matricula" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Ej: AAA1234">
                 </div>
             </div>
 
+            <!-- Sección Nafta -->
             <div class="space-y-4">
-                <p class="text-[9px] font-black text-green-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Electricidad ($/kWh)</p>
+                <p class="text-[9px] font-black text-blue-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Nafta ($ por Litro)</p>
                 <div class="grid grid-cols-2 gap-4">
-                    <input id="p-empresa" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="Empresa">
-                    <input id="p-hogar" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="Hogar">
-                    <input id="p-ute-r" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="DC Rápida">
-                    <input id="p-ute-l" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100" placeholder="AC Lenta">
-                    <input id="p-wallbox" type="number" step="0.01" class="bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100 col-span-2" placeholder="Wallbox Especial">
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Super 95</label>
+                        <input id="p-super" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Premium 97</label>
+                        <input id="p-premium" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 10S</label>
+                        <input id="p-gasoil10" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Gasoil 50S</label>
+                        <input id="p-gasoil50" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
                 </div>
             </div>
 
+            <!-- Sección Electricidad (CON ETIQUETAS CLARAS) -->
+            <div class="space-y-4">
+                <p class="text-[9px] font-black text-green-500/50 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Precios Energía ($ por kWh)</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Cutcsa / Empresa</label>
+                        <input id="p-empresa" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Hogar (Valle)</label>
+                        <input id="p-hogar" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Rápida (DC)</label>
+                        <input id="p-ute-r" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">UTE Lenta (AC)</label>
+                        <input id="p-ute-l" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                    <div class="space-y-1 col-span-2">
+                        <label class="text-[8px] text-zinc-500 uppercase ml-2">Wallbox Especial / Otros</label>
+                        <input id="p-wallbox" type="number" step="0.01" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-100">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección Taller -->
             <div class="space-y-4">
                 <p class="text-[9px] font-black text-zinc-600 uppercase tracking-widest border-b border-zinc-900 pb-2 italic">Datos Taller Service</p>
-                <input id="conf-taller" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Taller">
-                <input id="conf-direccion" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="Dirección">
-                <input id="conf-tel" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300" placeholder="WhatsApp">
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Nombre del Taller</label>
+                    <input id="conf-taller" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Dirección GPS</label>
+                    <input id="conf-direccion" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[8px] text-zinc-500 uppercase ml-2">Teléfono WhatsApp</label>
+                    <input id="conf-tel" type="text" class="w-full bg-zinc-900 border border-zinc-800 p-4 text-sm outline-none text-zinc-300">
+                </div>
             </div>
             
-            <button onclick="guardarConfig()" class="w-full bg-blue-600 p-5 rounded-[2rem] font-black tracking-widest text-xs shadow-xl active:scale-95 transition-all uppercase italic">Actualizar Todo</button>
+            <button onclick="guardarConfig()" class="w-full bg-blue-600 p-5 rounded-[2rem] font-black tracking-widest text-xs shadow-xl active:scale-95 transition-all uppercase italic">Actualizar Ajustes</button>
         </div>
     </div>
 
@@ -473,3 +518,4 @@
 
 </body>
 </html>
+
