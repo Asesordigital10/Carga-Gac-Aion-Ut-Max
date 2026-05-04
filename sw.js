@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asysauto-v14'; // Versión 14 obligatoria
+const CACHE_NAME = 'asysauto-v18'; // Versión 18: Nuevos textos de tarifa
 const assets = ['./', './index.html', './logoasys.png', './manifest.json'];
 
 self.addEventListener('install', e => {
