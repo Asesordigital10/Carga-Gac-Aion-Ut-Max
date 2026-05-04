@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asysauto-v19'; // Versión 19 oficial
+const CACHE_NAME = 'asysauto-v20'; // Versión 20
 const assets = [
   './',
   './index.html',
